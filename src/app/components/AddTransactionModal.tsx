@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { type FinanceTransaction, useFinance } from "../data/financeStore";
 import { CustomSelect } from "./ui/CustomSelect";
 import { CustomDatePicker } from "./ui/CustomDatePicker";
-import { convertCurrency } from "../utils";
+import { convertCurrency, formatCurrency } from "../utils";
 
 interface AddTransactionModalProps {
   isOpen: boolean;
@@ -15,7 +15,7 @@ interface AddTransactionModalProps {
 }
 
 export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: AddTransactionModalProps) {
-  const { addTransaction, updateTransaction, categories, accounts, exchangeRates } = useFinance();
+  const { addTransaction, updateTransaction, categories, accounts, exchangeRates, currencies, fetchLiveRates } = useFinance();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [type, setType] = useState<"expense" | "income" | "transfer">(initialData?.type || "expense");
   const [amount, setAmount] = useState(initialData ? Math.abs(initialData.amount).toString() : "");
@@ -41,6 +41,12 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
     }
   }, [sourceAccount, initialData]);
 
+  useEffect(() => {
+    if (isOpen) {
+      fetchLiveRates();
+    }
+  }, [isOpen, fetchLiveRates]);
+
   const isCrossCurrency = type === "transfer" && sourceAccount && destAccount && sourceAccount.currency !== destAccount.currency;
 
   useEffect(() => {
@@ -49,6 +55,7 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
       if (parsedAmount > 0) {
         const converted = convertCurrency(parsedAmount, sourceAccount.currency, destAccount.currency, exchangeRates);
         setDestinationAmount(converted.toFixed(2));
+        setFeeAmount("0.00");
       }
     }
   }, [amount, isCrossCurrency, sourceAccount, destAccount, exchangeRates, initialData]);
@@ -193,7 +200,7 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
                     onChange={(event) => setAmount(event.target.value)}
                     placeholder="0.00" 
                     min="0"
-                    step="0.01"
+                    step="0.000001"
                     className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl py-2 px-4 text-xl font-semibold text-zinc-100 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
                   />
                 </div>
@@ -208,16 +215,18 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
                   <CustomSelect
                     value={currency}
                     onChange={setCurrency}
-                    options={[
-                      { label: "USD", value: "USD" },
-                      { label: "EUR", value: "EUR" },
-                      { label: "GBP", value: "GBP" },
-                      { label: "BDT", value: "BDT" },
-                    ]}
+                    options={currencies.map(c => ({ label: c, value: c }))}
                   />
                 )}
               </div>
             </div>
+
+            {currency === "ETH" && exchangeRates["ETH"] && (
+              <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-sm text-indigo-300 flex flex-wrap items-center justify-between">
+                <span>Rate: <strong>1 Ξ ≈ {formatCurrency(1 / exchangeRates["ETH"], "USD")}</strong></span>
+                <span>Total: <strong>{amount ? formatCurrency(Number(amount) / exchangeRates["ETH"], "USD") : "$0.00"}</strong></span>
+              </div>
+            )}
 
             {isCrossCurrency && (
               <div className="grid grid-cols-2 gap-4 p-4 bg-zinc-950/50 border border-zinc-800 rounded-xl">
@@ -226,7 +235,21 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
                   <input 
                     type="number" 
                     value={destinationAmount}
-                    onChange={(event) => setDestinationAmount(event.target.value)}
+                    onChange={(event) => {
+                      const newDestAmount = event.target.value;
+                      setDestinationAmount(newDestAmount);
+                      
+                      const parsedSource = Number(amount);
+                      const parsedDest = Number(newDestAmount);
+                      if (parsedSource > 0 && parsedDest >= 0 && sourceAccount && destAccount) {
+                        const standardDest = convertCurrency(parsedSource, sourceAccount.currency, destAccount.currency, exchangeRates);
+                        if (parsedDest !== standardDest) {
+                           const destDiff = standardDest - parsedDest;
+                           const fee = convertCurrency(destDiff, destAccount.currency, sourceAccount.currency, exchangeRates);
+                           setFeeAmount(Math.max(0, fee).toFixed(2));
+                        }
+                      }
+                    }}
                     placeholder="0.00" 
                     min="0"
                     step="0.01"

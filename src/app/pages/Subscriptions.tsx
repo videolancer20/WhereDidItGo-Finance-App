@@ -179,6 +179,7 @@ function SubscriptionCard({ sub, onEdit, onPause, onDelete, onPay, onSkip, onRew
 }
 
 function SubscriptionModal({ onClose, initialData, accounts, categories, onSubmit }: any) {
+  const { currencies } = useFinance();
   const [formData, setFormData] = useState({
     name: initialData?.name || "",
     amount: initialData?.amount?.toString() || "",
@@ -265,12 +266,7 @@ function SubscriptionModal({ onClose, initialData, accounts, categories, onSubmi
                 <CustomSelect 
                   value={formData.currency} 
                   onChange={val => setFormData({...formData, currency: val})} 
-                  options={[
-                    {label: "USD", value: "USD"},
-                    {label: "EUR", value: "EUR"},
-                    {label: "GBP", value: "GBP"},
-                    {label: "BDT", value: "BDT"}
-                  ]} 
+                  options={currencies.map(c => ({ label: c, value: c }))} 
                 />
               </div>
               <div>

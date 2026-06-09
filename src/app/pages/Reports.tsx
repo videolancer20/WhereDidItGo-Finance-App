@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { downloadTextFile, exportTransactionsCsv, type SavedReport, useFinance } from "../data/financeStore";
 import { formatCurrency } from "../utils";
+import { generateStandardReport, generateCashFlowReport } from "../utils/pdfExport";
 
 function makePdf(title: string, lines: string[]) {
   const content = [`BT /F1 16 Tf 50 780 Td (${title}) Tj`, ...lines.map((line, index) => `50 ${750 - index * 18} Td (${line.replace(/[()]/g, "")}) Tj`), "ET"].join("\n");
@@ -61,7 +62,22 @@ export function Reports() {
 
   function generate(kind: Parameters<typeof generateReport>[0]) {
     const report = generateReport(kind);
-    downloadReport(report);
+    if (kind === "Monthly" || kind === "Profit & Loss") {
+      generateStandardReport({
+        title: kind === "Monthly" ? "Monthly Financial Report" : "Profit & Loss Statement",
+        transactions,
+        totals,
+        dateRange: range
+      });
+    } else if (kind === "Cash Flow") {
+      generateCashFlowReport({
+        title: "Cash Flow Report",
+        transactions,
+        dateRange: range
+      });
+    } else if (kind === "Category") {
+      exportTransactionsCsv(transactions);
+    }
   }
 
   return (

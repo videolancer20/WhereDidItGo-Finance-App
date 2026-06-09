@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Calendar } from "lucide-react";
 import { CustomDatePicker } from "./ui/CustomDatePicker";
 
-export type TimePreset = "day" | "week" | "month" | "year" | "custom";
+export type TimePreset = "day" | "week" | "month" | "year" | "all" | "custom";
 
 interface TimeFilterProps {
   onChange: (range: { start: string; end: string }) => void;
@@ -26,6 +26,9 @@ function getRange(preset: TimePreset): { start: string; end: string } {
     case "year":
       from.setFullYear(from.getFullYear() - 1);
       break;
+    case "all":
+      from.setFullYear(2000, 0, 1);
+      break;
     default:
       from.setDate(from.getDate() - 30);
   }
@@ -44,6 +47,7 @@ export function TimeFilter({ onChange, compact }: TimeFilterProps) {
     { key: "week", label: "Week" },
     { key: "month", label: "Month" },
     { key: "year", label: "Year" },
+    { key: "all", label: "All Time" },
   ];
 
   function selectPreset(preset: TimePreset) {

@@ -16,7 +16,7 @@ import { ColorSelect } from '../components/ui/ColorSelect';
 const goalIcons = { Target, Home, Plane, Laptop };
 
 function GoalModal({ goal, onClose }: { goal?: GoalRecord; onClose: () => void }) {
-  const { addGoal, updateGoal } = useFinance();
+  const { addGoal, updateGoal, currencies } = useFinance();
   const [name, setName] = useState(goal?.name ?? "");
   const [target, setTarget] = useState(String(goal?.target ?? 10000));
   const [current, setCurrent] = useState(String(goal?.current ?? 0));
@@ -69,12 +69,7 @@ function GoalModal({ goal, onClose }: { goal?: GoalRecord; onClose: () => void }
           <CustomSelect 
             value={currency} 
             onChange={(val) => setCurrency(val)} 
-            options={[
-              {label: "USD", value: "USD"},
-              {label: "EUR", value: "EUR"},
-              {label: "GBP", value: "GBP"},
-              {label: "BDT", value: "BDT"}
-            ]} 
+            options={currencies.map(c => ({ label: c, value: c }))} 
           />
           <input value={due} onChange={(event) => setDue(event.target.value)} placeholder="Target date" className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl py-2.5 px-3 text-sm text-zinc-200" />
           <div>

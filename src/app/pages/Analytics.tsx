@@ -9,17 +9,29 @@ import {
   LineChart,
   Line,
   Legend,
-  Brush,
-  ReferenceArea
+  AreaChart,
+  Area,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  PieChart,
+  Pie,
+  Cell
 } from "recharts";
-import { Download, PieChart as PieChartIcon } from "lucide-react";
+import { Download, PieChart as PieChartIcon, ArrowRight, TrendingDown, Target, Zap } from "lucide-react";
 import { useMemo, useState, useRef, useEffect } from "react";
-import { downloadTextFile, useFinance } from "../data/financeStore";
+import { type GoalRecord, type BudgetRecord, useFinance } from "../data/financeStore";
 import { formatCurrency } from "../utils";
+import { generateAnalyticsExport } from "../utils/pdfExport";
 import { TimeFilter } from "../components/TimeFilter";
+import clsx from "clsx";
+
+const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#ec4899', '#14b8a6'];
 
 export function Analytics() {
-  const { transactions, totals } = useFinance();
+  const { transactions, totals, budgets, accounts, accountBalances, subscriptions, exchangeRates } = useFinance();
   const [dateRange, setDateRange] = useState({ start: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10) });
 
   const filteredTransactions = useMemo(() => {
@@ -55,20 +67,87 @@ export function Analytics() {
   }, [filteredTransactions]);
   
   const healthScore = Math.max(1, Math.min(99, Math.round(72 + ((totalIncome - totalExpense) / Math.max(1, totalIncome)) * 30)));
+  const incomeExpenseRatio = totalIncome > 0 ? (totalExpense / totalIncome * 100).toFixed(1) : "0.0";
 
-  const incomeExpenseRatio = totalIncome > 0 ? (totalExpense / totalIncome * 100).toFixed(1) : 0;
+  // New: Area Data (Net Worth)
+  const areaData = useMemo(() => {
+    const currentNetWorth = accounts.reduce((acc, account) => acc + (accountBalances[account.id] ?? 0), 0);
+    const monthlyNW = [];
+    let rollingNW = currentNetWorth;
+
+    const reversedMonths = [...monthlyData].reverse();
+    for (const month of reversedMonths) {
+       monthlyNW.push({ name: month.name, netWorth: rollingNW });
+       rollingNW -= month.profit;
+    }
+    
+    return monthlyNW.reverse();
+  }, [monthlyData, accounts, accountBalances]);
+
+  // New: Radar Data (Budget vs Actual)
+  const radarData = useMemo(() => {
+    return budgets.map(b => {
+      const actual = filteredTransactions
+        .filter((t) => {
+          if (t.type !== "expense") return false;
+          if (b.targetType === "account") return t.accountId === b.categoryId;
+          return t.categoryId === b.categoryId;
+        })
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      return { 
+        subject: b.category, 
+        budget: b.limit, 
+        actual, 
+        fullMark: Math.max(b.limit, actual) * 1.2 
+      };
+    });
+  }, [budgets, filteredTransactions]);
+
+  // New: Currency Exposure Pie
+  const currencyData = useMemo(() => {
+    const groups = new Map<string, number>();
+    accounts.forEach(a => {
+       const bal = accountBalances[a.id] ?? 0;
+       if (bal > 0) {
+          const rate = exchangeRates[a.currency] || 1;
+          const baseValue = bal / rate; // Standardize relative scale
+          groups.set(a.currency, (groups.get(a.currency) ?? 0) + baseValue);
+       }
+    });
+    return Array.from(groups.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [accounts, accountBalances, exchangeRates]);
+
+  // New: Runway & Burn Rate Predictor
+  const { runway, burnRate, liquidAssets } = useMemo(() => {
+    const liquid = accounts
+      .filter(a => a.type !== 'Credit Card' && !a.name.toLowerCase().includes('loan'))
+      .reduce((sum, a) => {
+        const bal = accountBalances[a.id] ?? 0;
+        return sum + (bal > 0 ? bal / (exchangeRates[a.currency] || 1) : 0);
+      }, 0);
+    
+    const months = Math.max(1, monthlyData.length);
+    const avgBurn = totalExpense / months;
+    const runwayMonths = avgBurn > 0 ? liquid / avgBurn : 999;
+    
+    return { runway: runwayMonths, burnRate: avgBurn, liquidAssets: liquid };
+  }, [accounts, accountBalances, exchangeRates, totalExpense, monthlyData.length]);
+
+  // New: Subscription Heatmap/Timeline
+  const upcomingSubscriptions = useMemo(() => {
+    return subscriptions
+      .filter(s => s.status === 'active')
+      .sort((a, b) => new Date(a.nextDueDate).getTime() - new Date(b.nextDueDate).getTime())
+      .slice(0, 4);
+  }, [subscriptions]);
 
   function exportAnalytics() {
-    const content = [
-      "FlowLedger Analytics",
-      `Period,${dateRange.start} to ${dateRange.end}`,
-      `Income,${totalIncome}`,
-      `Expenses,${totalExpense}`,
-      `Net Profit,${totalIncome - totalExpense}`,
-      `Health Score,${healthScore}`,
-      `Expense Ratio,${incomeExpenseRatio}%`,
-    ].join("\n");
-    downloadTextFile(`flowledger-analytics-${dateRange.start}-${dateRange.end}.csv`, content, "text/csv");
+    generateAnalyticsExport({
+      title: "Analytics Insights Export",
+      transactions: filteredTransactions,
+      budgets: budgets,
+      dateRange: `${dateRange.start} to ${dateRange.end}`,
+    });
   }
 
   // Interactive Chart State
@@ -136,8 +215,8 @@ export function Analytics() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 pb-20">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-zinc-100">Analytics & Reports</h1>
-          <p className="text-zinc-500 text-sm mt-1">Deep dive into your financial health and trends.</p>
+          <h1 className="text-2xl font-semibold text-zinc-100">Analytics & Insights</h1>
+          <p className="text-zinc-500 text-sm mt-1">Deep dive into your financial health, forecasts, and multi-currency exposure.</p>
         </div>
         <div className="flex items-center gap-3">
           <TimeFilter onChange={setDateRange} compact />
@@ -166,94 +245,166 @@ export function Analytics() {
                 data={monthlyData.slice(currentLeft, currentRight + 1)} 
                 margin={{ top: 20, right: 0, left: -20, bottom: 0 }}
                 onMouseMove={(e) => {
-                  if (e && e.activeTooltipIndex !== undefined) {
-                    activeTooltipIndexRef.current = e.activeTooltipIndex;
-                  }
+                  if (e && e.activeTooltipIndex !== undefined) activeTooltipIndexRef.current = e.activeTooltipIndex;
                 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="name" stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} domain={[monthlyData[currentLeft]?.name || 'dataMin', monthlyData[currentRight]?.name || 'dataMax']} allowDataOverflow />
+                <XAxis dataKey="name" stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value/1000}k`} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }}
-                  itemStyle={{ color: '#e4e4e7' }}
-                  cursor={{ fill: '#27272a', opacity: 0.4 }}
-                />
+                <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }} itemStyle={{ color: '#e4e4e7' }} cursor={{ fill: '#27272a', opacity: 0.4 }} />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#a1a1aa', paddingTop: '10px' }} />
-                <Bar dataKey="income" name="Income" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} animationDuration={300} />
-                <Bar dataKey="expense" name="Expense" fill="#f43f5e" radius={[4, 4, 0, 0]} maxBarSize={40} animationDuration={300} />
+                <Bar dataKey="income" name="Income" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="expense" name="Expense" fill="#f43f5e" radius={[4, 4, 0, 0]} maxBarSize={40} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-xs text-zinc-500 mt-2 text-center">Scroll to zoom in and out.</p>
         </div>
 
-        {/* Profit Trend Line Chart */}
+        {/* Historical Net Worth Area Chart */}
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm select-none">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-zinc-100">Net Profit Margin</h2>
+            <h2 className="text-lg font-semibold text-zinc-100">Historical Net Worth</h2>
           </div>
           <div className="h-80" ref={chartContainerRef2}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart 
-                data={monthlyData.slice(currentLeft, currentRight + 1)} 
+              <AreaChart 
+                data={areaData.slice(currentLeft, currentRight + 1)} 
                 margin={{ top: 20, right: 0, left: -20, bottom: 0 }}
                 onMouseMove={(e) => {
-                  if (e && e.activeTooltipIndex !== undefined) {
-                    activeTooltipIndexRef.current = e.activeTooltipIndex;
-                  }
+                  if (e && e.activeTooltipIndex !== undefined) activeTooltipIndexRef.current = e.activeTooltipIndex;
                 }}
               >
+                <defs>
+                  <linearGradient id="colorNw" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.5}/>
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="name" stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} domain={[monthlyData[currentLeft]?.name || 'dataMin', monthlyData[currentRight]?.name || 'dataMax']} allowDataOverflow />
+                <XAxis dataKey="name" stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value/1000}k`} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }}
-                  itemStyle={{ color: '#e4e4e7' }}
-                />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#a1a1aa', paddingTop: '10px' }} />
-                <Line type="monotone" dataKey="profit" name="Net Profit" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 0 }} activeDot={{ r: 6, strokeWidth: 0 }} animationDuration={300} />
-              </LineChart>
+                <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }} itemStyle={{ color: '#e4e4e7' }} />
+                <Area type="monotone" dataKey="netWorth" name="Net Worth" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorNw)" />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-xs text-zinc-500 mt-2 text-center">Scroll to zoom in and out.</p>
+        </div>
+
+        {/* Budget vs Actual Radar Chart */}
+        <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
+          <h2 className="text-lg font-semibold text-zinc-100 mb-2">Budget Utilization (Radar)</h2>
+          <div className="h-80 w-full flex items-center justify-center">
+            {radarData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                  <PolarGrid stroke="#27272a" />
+                  <PolarAngleAxis dataKey="subject" stroke="#a1a1aa" fontSize={12} />
+                  <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={false} axisLine={false} />
+                  <Radar name="Budget Limit" dataKey="budget" stroke="#10b981" fill="#10b981" fillOpacity={0.3} />
+                  <Radar name="Actual Spent" dataKey="actual" stroke="#f43f5e" fill="#f43f5e" fillOpacity={0.6} />
+                  <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }} />
+                  <Legend wrapperStyle={{ fontSize: '12px', color: '#a1a1aa' }} />
+                </RadarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-zinc-500 text-sm">No active budgets set for this period.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Currency Exposure & Burn Rate */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col">
+            <h2 className="text-lg font-semibold text-zinc-100 mb-2">Currency Exposure</h2>
+            <p className="text-xs text-zinc-500 mb-4">Distribution of your liquid assets</p>
+            <div className="h-48 flex-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={currencyData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={5} dataKey="value">
+                    {currencyData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="rgba(0,0,0,0)" />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number, name: string) => [`${(value / currencyData.reduce((a,b)=>a+b.value,0)*100).toFixed(1)}%`, name]} contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }} />
+                  <Legend wrapperStyle={{ fontSize: '12px', color: '#a1a1aa' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col justify-center relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Zap className="w-24 h-24 text-amber-500" />
+            </div>
+            <h2 className="text-lg font-semibold text-zinc-100 mb-1">Financial Runway</h2>
+            <p className="text-xs text-zinc-500 mb-6">Based on your average burn rate</p>
+            
+            <div className="space-y-4 relative z-10">
+              <div>
+                <div className="text-3xl font-bold text-amber-400">
+                  {runway === 999 ? "∞" : runway.toFixed(1)} <span className="text-lg font-medium text-zinc-400">months</span>
+                </div>
+                <p className="text-xs text-zinc-400 mt-1">Expected survival without income</p>
+              </div>
+              
+              <div className="pt-4 border-t border-zinc-800/60">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm text-zinc-400">Monthly Burn Rate</span>
+                  <span className="text-sm font-medium text-rose-400">{formatCurrency(burnRate)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-zinc-400">Liquid Assets</span>
+                  <span className="text-sm font-medium text-emerald-400">{formatCurrency(liquidAssets)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col items-center justify-center text-center">
+      {/* Insight Cards Row */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="col-span-1 md:col-span-1 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col items-center justify-center text-center">
           <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4 border border-emerald-500/20">
             <span className="text-2xl font-bold text-emerald-400">{healthScore}</span>
           </div>
-          <h3 className="text-zinc-100 font-medium">Financial Health Score</h3>
-          <p className="text-xs text-zinc-500 mt-2">Based on profit rate, expense pressure, and balance coverage.</p>
+          <h3 className="text-zinc-100 font-medium">Health Score</h3>
+          <p className="text-xs text-zinc-500 mt-2">Based on profit rate and balances.</p>
         </div>
         
-        <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
-          <h3 className="text-sm font-semibold text-zinc-100 uppercase tracking-wider mb-4">Top Spending Categories</h3>
-          <div className="space-y-4">
-            {(topSpending.length ? topSpending : [["None", 0]]).map(([category, amount], index) => (
-            <div key={category}>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-zinc-300">{category}</span>
-                <span className="text-zinc-400">{formatCurrency(Number(amount))}</span>
-              </div>
-              <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${index === 0 ? "bg-violet-500" : index === 1 ? "bg-blue-500" : "bg-amber-500"}`} style={{ width: `${Math.max(2, Math.min(100, Number(amount) / Math.max(1, totalExpense) * 100))}%` }}></div>
-              </div>
-            </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col items-center justify-center text-center">
+        <div className="col-span-1 md:col-span-1 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col items-center justify-center text-center">
           <div className="w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center mb-4 border border-blue-500/20">
             <PieChartIcon className="w-8 h-8 text-blue-400" />
           </div>
-          <h3 className="text-zinc-100 font-medium mb-2">Income / Expense Ratio</h3>
-          <div className="text-3xl font-bold text-zinc-100 mb-1">{incomeExpenseRatio}%</div>
-          <p className="text-xs text-zinc-500">You spend {incomeExpenseRatio}% of what you earn during this period.</p>
+          <h3 className="text-zinc-100 font-medium mb-2">Expense Ratio</h3>
+          <div className="text-2xl font-bold text-zinc-100">{incomeExpenseRatio}%</div>
+          <p className="text-xs text-zinc-500 mt-1">of income spent</p>
+        </div>
+
+        <div className="col-span-1 md:col-span-2 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col">
+          <h3 className="text-sm font-semibold text-zinc-100 uppercase tracking-wider mb-4">Upcoming Liabilities Map</h3>
+          <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pr-2">
+            {upcomingSubscriptions.length > 0 ? (
+              upcomingSubscriptions.map(sub => {
+                const subAccount = accounts.find(a => a.id === sub.accountId);
+                return (
+                  <div key={sub.id} className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-800/30 border border-zinc-800/50">
+                    <div className="flex items-center gap-3">
+                      <div className={clsx("w-2 h-2 rounded-full", sub.color || "bg-indigo-500")}></div>
+                      <div>
+                        <p className="text-sm font-medium text-zinc-200">{sub.name}</p>
+                        <p className="text-xs text-zinc-500">{new Date(sub.nextDueDate).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold text-rose-400">{formatCurrency(sub.amount, subAccount?.currency)}</span>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-zinc-500 text-center py-4">No active subscriptions detected.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

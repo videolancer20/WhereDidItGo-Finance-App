@@ -20,7 +20,6 @@ import {
 } from "../data/financeStore";
 import { formatCurrency } from "../utils";
 
-const pageSize = 8;
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -76,6 +75,7 @@ export function Transactions() {
   const [dateRange, setDateRange] = useState({ start: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10) });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editing, setEditing] = useState<FinanceTransaction | null>(null);
+  const [pageSize, setPageSize] = useState(100);
 
   useEffect(() => {
     const focusedId = searchParams.get("focus");
@@ -311,7 +311,7 @@ export function Transactions() {
                   <td className="px-6 py-4 text-zinc-400"><span className="px-2.5 py-1 bg-zinc-800/50 border border-zinc-700/50 rounded-md text-xs">{transaction.category}</span></td>
                   <td className="px-6 py-4 text-zinc-400">{transaction.account}</td>
                   <td className={`px-6 py-4 text-right font-medium whitespace-nowrap ${transaction.type === "income" ? "text-emerald-400" : transaction.type === "transfer" ? "text-cyan-400" : "text-zinc-200"}`}>
-                    {transaction.type === "income" ? "+" : "-"}{formatCurrency(Math.abs(transaction.amount))}
+                    {transaction.type === "income" ? "+" : "-"}{formatCurrency(Math.abs(transaction.amount), transaction.currency)}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex justify-end gap-2">
@@ -336,8 +336,26 @@ export function Transactions() {
           </table>
         </div>
 
-        <div className="p-4 border-t border-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm text-zinc-500 bg-zinc-900/50 rounded-b-2xl">
-          <span>Showing {pagedTransactions.length} of {visibleTransactions.length} entries</span>
+        <div className="p-4 border-t border-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-sm text-zinc-500 bg-zinc-900/50 rounded-b-2xl">
+          <div className="flex flex-wrap items-center gap-4">
+            <span>Showing {pagedTransactions.length} of {visibleTransactions.length} entries</span>
+            <div className="flex items-center gap-2">
+              <span>Rows:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-zinc-950/50 border border-zinc-800 rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500/50 text-zinc-300"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          </div>
           <div className="flex gap-1">
             <button onClick={() => setPage((current) => Math.max(1, current - 1))} className="px-3 py-1 rounded border border-zinc-800 hover:bg-zinc-800/50 text-zinc-400 disabled:opacity-50" disabled={currentPage === 1}>Previous</button>
             <button className="px-3 py-1 rounded border border-indigo-500/50 bg-indigo-500/10 text-indigo-400">{currentPage}</button>

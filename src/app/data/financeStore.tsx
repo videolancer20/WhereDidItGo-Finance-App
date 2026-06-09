@@ -1,5 +1,7 @@
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { AlertCircle, Zap } from "lucide-react";
+import { formatCurrency } from "../utils";
 
 export type TransactionType = "income" | "expense" | "transfer";
 
@@ -27,6 +29,9 @@ export interface FinanceTransaction {
   attachments: FinanceAttachment[];
   transferAccountId?: string;
   transferAccount?: string;
+  destinationAmount?: number;
+  destinationCurrency?: string;
+  feeAmount?: number;
 }
 
 export interface CategoryRecord {
@@ -54,8 +59,9 @@ export interface AccountRecord {
 
 export interface BudgetRecord {
   id: string;
-  categoryId: string;
-  category: string;
+  categoryId: string; // re-used as targetId for accounts
+  category: string; // re-used as targetName for accounts
+  targetType?: "category" | "account";
   limit: number;
   color: string;
   month: string;
@@ -98,10 +104,13 @@ export interface AppSettings {
   firstName: string;
   lastName: string;
   email: string;
-  currency: "USD" | "EUR" | "GBP" | "BDT";
+  currency: string;
   dateFormat: "MMM d, yyyy" | "yyyy-MM-dd" | "MM/dd/yyyy";
-  theme: "dark" | "system";
+  theme: string;
   backupSchedule: "Off" | "Daily" | "Weekly" | "Monthly";
+  customCurrencies?: string[];
+  avatarUrl?: string;
+  dismissedAlerts?: string[];
 }
 
 export interface LoanEntity {
@@ -190,11 +199,36 @@ export interface NewTransactionInput {
   feeAmount?: number;
 }
 
-const appStateVersion = 1;
-const indexedDbName = "flowledger-v0";
+export interface Workspace {
+  id: string;
+  name: string;
+}
+
+export const getWorkspaces = (): Workspace[] => {
+  try {
+    return JSON.parse(localStorage.getItem("flowledger-workspaces") || '[{"id":"default","name":"Personal"}]');
+  } catch {
+    return [{ id: "default", name: "Personal" }];
+  }
+};
+
+export const setWorkspaces = (ws: Workspace[]) => {
+  localStorage.setItem("flowledger-workspaces", JSON.stringify(ws));
+};
+
+export const getActiveWorkspaceId = () => {
+  return localStorage.getItem("flowledger-active-workspace") || "default";
+};
+
+export const setActiveWorkspaceId = (id: string) => {
+  localStorage.setItem("flowledger-active-workspace", id);
+};
+
+export const getIndexedDbName = () => `flowledger-workspace-${getActiveWorkspaceId()}`;
 const indexedStoreName = "app-state";
 const indexedStateKey = "finance-state";
 const legacyTransactionsKey = "flowledger.transactions";
+const appStateVersion = 1;
 
 const categories: CategoryRecord[] = [
   { id: "personal-expenses", name: "Personal Expenses", type: "expense", icon: "User", color: "bg-blue-500/20 text-blue-400", archived: false },
@@ -215,12 +249,12 @@ const categories: CategoryRecord[] = [
 ];
 
 const accounts: AccountRecord[] = [
-  { id: "mercury-business", name: "Mercury Business", type: "Business Bank", openingBalance: 70250, number: "**** 4201", icon: "Building2", trend: [10, 20, 15, 30, 25, 40, 35], color: "from-indigo-500/20 to-purple-500/0", stroke: "#8b5cf6", archived: false },
-  { id: "chase-personal", name: "Chase Personal", type: "Personal Bank", openingBalance: 12571.8, number: "**** 8892", icon: "Building2", trend: [5, 12, 8, 15, 10, 18, 22], color: "from-blue-500/20 to-blue-500/0", stroke: "#3b82f6", archived: false },
-  { id: "wealthfront", name: "Wealthfront", type: "Savings Account", openingBalance: 27729.05, number: "**** 1102", icon: "PiggyBank", trend: [20, 22, 23, 25, 26, 27, 28], color: "from-emerald-500/20 to-emerald-500/0", stroke: "#10b981", archived: false },
-  { id: "brex-card", name: "Brex Card", type: "Credit Card", openingBalance: -996.5, number: "**** 9931", icon: "CreditCard", trend: [0, -5, -15, -10, -25, -20, -30], color: "from-rose-500/20 to-rose-500/0", stroke: "#f43f5e", archived: false },
-  { id: "cash-app", name: "Cash App", type: "Mobile Banking", openingBalance: 850, number: "@alexjensen", icon: "Smartphone", trend: [2, 5, 3, 8, 4, 10, 8], color: "from-teal-500/20 to-teal-500/0", stroke: "#14b8a6", archived: false },
-  { id: "physical-wallet", name: "Physical Wallet", type: "Cash Wallet", openingBalance: 350, number: "N/A", icon: "Wallet", trend: [8, 7, 6, 5, 4, 3, 3], color: "from-amber-500/20 to-amber-500/0", stroke: "#f59e0b", archived: false },
+  { id: "mercury-business", name: "Mercury Business", type: "Business Bank", openingBalance: 70250, number: "**** 4201", icon: "Building2", trend: [10, 20, 15, 30, 25, 40, 35], color: "from-indigo-500/20 to-purple-500/0", stroke: "#8b5cf6", archived: false, currency: "USD" },
+  { id: "chase-personal", name: "Chase Personal", type: "Personal Bank", openingBalance: 12571.8, number: "**** 8892", icon: "Building2", trend: [5, 12, 8, 15, 10, 18, 22], color: "from-blue-500/20 to-blue-500/0", stroke: "#3b82f6", archived: false, currency: "USD" },
+  { id: "wealthfront", name: "Wealthfront", type: "Savings Account", openingBalance: 27729.05, number: "**** 1102", icon: "PiggyBank", trend: [20, 22, 23, 25, 26, 27, 28], color: "from-emerald-500/20 to-emerald-500/0", stroke: "#10b981", archived: false, currency: "USD" },
+  { id: "brex-card", name: "Brex Card", type: "Credit Card", openingBalance: -996.5, number: "**** 9931", icon: "CreditCard", trend: [0, -5, -15, -10, -25, -20, -30], color: "from-rose-500/20 to-rose-500/0", stroke: "#f43f5e", archived: false, currency: "USD" },
+  { id: "cash-app", name: "Cash App", type: "Mobile Banking", openingBalance: 850, number: "@alexjensen", icon: "Smartphone", trend: [2, 5, 3, 8, 4, 10, 8], color: "from-teal-500/20 to-teal-500/0", stroke: "#14b8a6", archived: false, currency: "USD" },
+  { id: "physical-wallet", name: "Physical Wallet", type: "Cash Wallet", openingBalance: 350, number: "N/A", icon: "Wallet", trend: [8, 7, 6, 5, 4, 3, 3], color: "from-amber-500/20 to-amber-500/0", stroke: "#f59e0b", archived: false, currency: "USD" },
 ];
 
 const initialTransactions: FinanceTransaction[] = [
@@ -237,25 +271,25 @@ const initialTransactions: FinanceTransaction[] = [
 ];
 
 const initialLoanEntities: LoanEntity[] = [
-  { id: "loan-chase", name: "Chase Business Loan", category: "bank", notes: "Business expansion loan", archived: false },
-  { id: "loan-alice", name: "Alice Rahman", category: "individual", notes: "Personal loan to friend", archived: false },
-  { id: "loan-fahim", name: "Fahim Ahmed", category: "individual", notes: "Borrowed for equipment", archived: false },
+  { id: "loan-chase", name: "Chase Business Loan", category: "bank", notes: "Business expansion loan", archived: false, currency: "USD" },
+  { id: "loan-alice", name: "Alice Rahman", category: "individual", notes: "Personal loan to friend", archived: false, currency: "USD" },
+  { id: "loan-fahim", name: "Fahim Ahmed", category: "individual", notes: "Borrowed for equipment", archived: false, currency: "USD" },
 ];
 
 const initialLoanTransactions: LoanTransaction[] = [
-  { id: "ltxn-1", entityId: "loan-chase", amount: 15000, type: "borrowed", date: "2026-01-15", notes: "Initial business loan", settled: false },
-  { id: "ltxn-2", entityId: "loan-alice", amount: 500, type: "lent", date: "2026-03-20", notes: "Lent for emergency", settled: false },
-  { id: "ltxn-3", entityId: "loan-fahim", amount: 2000, type: "borrowed", date: "2026-04-10", notes: "Equipment purchase help", settled: false },
-  { id: "ltxn-4", entityId: "loan-chase", amount: 3000, type: "borrowed", date: "2026-02-01", notes: "Additional credit line", settled: true },
+  { id: "ltxn-1", entityId: "loan-chase", amount: 15000, type: "borrowed", date: "2026-01-15", notes: "Initial business loan", settled: false, currency: "USD" },
+  { id: "ltxn-2", entityId: "loan-alice", amount: 500, type: "lent", date: "2026-03-20", notes: "Lent for emergency", settled: false, currency: "USD" },
+  { id: "ltxn-3", entityId: "loan-fahim", amount: 2000, type: "borrowed", date: "2026-04-10", notes: "Equipment purchase help", settled: false, currency: "USD" },
+  { id: "ltxn-4", entityId: "loan-chase", amount: 3000, type: "borrowed", date: "2026-02-01", notes: "Additional credit line", settled: true, currency: "USD" },
 ];
 
 const initialSubscriptions: Subscription[] = [
-  { id: "sub-netflix", name: "Netflix", amount: 15.99, frequency: "monthly", categoryId: "personal-expenses", accountId: "chase-personal", startDate: "2025-01-01", nextDueDate: "2026-07-01", status: "active", notes: "Premium plan", color: "bg-rose-500" },
-  { id: "sub-adobe", name: "Adobe Creative Cloud", amount: 54.99, frequency: "monthly", categoryId: "software", accountId: "brex-card", startDate: "2025-03-01", nextDueDate: "2026-07-01", status: "active", notes: "All apps plan", color: "bg-red-500" },
-  { id: "sub-aws", name: "AWS Web Services", amount: 340.50, frequency: "monthly", categoryId: "software", accountId: "brex-card", startDate: "2024-06-01", nextDueDate: "2026-06-28", status: "active", notes: "Production hosting", color: "bg-amber-500" },
-  { id: "sub-wework", name: "WeWork Hot Desk", amount: 399, frequency: "monthly", categoryId: "office", accountId: "brex-card", startDate: "2025-09-01", nextDueDate: "2026-07-02", status: "active", notes: "Flexible workspace", color: "bg-blue-500" },
-  { id: "sub-gym", name: "Gym Membership", amount: 49.99, frequency: "monthly", categoryId: "personal-expenses", accountId: "chase-personal", startDate: "2025-06-01", nextDueDate: "2026-07-01", status: "active", notes: "Monthly membership", color: "bg-emerald-500" },
-  { id: "sub-figma", name: "Figma Pro", amount: 15, frequency: "monthly", categoryId: "software", accountId: "brex-card", startDate: "2025-01-01", nextDueDate: "2026-07-01", status: "paused", notes: "Design tool", color: "bg-violet-500" }
+  { id: "sub-netflix", name: "Netflix", amount: 15.99, frequency: "monthly", categoryId: "personal-expenses", accountId: "chase-personal", startDate: "2025-01-01", nextDueDate: "2026-07-01", status: "active", notes: "Premium plan", color: "bg-rose-500", currency: "USD" },
+  { id: "sub-adobe", name: "Adobe Creative Cloud", amount: 54.99, frequency: "monthly", categoryId: "software", accountId: "brex-card", startDate: "2025-03-01", nextDueDate: "2026-07-01", status: "active", notes: "All apps plan", color: "bg-red-500", currency: "USD" },
+  { id: "sub-aws", name: "AWS Web Services", amount: 340.50, frequency: "monthly", categoryId: "software", accountId: "brex-card", startDate: "2024-06-01", nextDueDate: "2026-06-28", status: "active", notes: "Production hosting", color: "bg-amber-500", currency: "USD" },
+  { id: "sub-wework", name: "WeWork Hot Desk", amount: 399, frequency: "monthly", categoryId: "office", accountId: "brex-card", startDate: "2025-09-01", nextDueDate: "2026-07-02", status: "active", notes: "Flexible workspace", color: "bg-blue-500", currency: "USD" },
+  { id: "sub-gym", name: "Gym Membership", amount: 49.99, frequency: "monthly", categoryId: "personal-expenses", accountId: "chase-personal", startDate: "2025-06-01", nextDueDate: "2026-07-01", status: "active", notes: "Monthly membership", color: "bg-emerald-500", currency: "USD" },
+  { id: "sub-figma", name: "Figma Pro", amount: 15, frequency: "monthly", categoryId: "software", accountId: "brex-card", startDate: "2025-01-01", nextDueDate: "2026-07-01", status: "paused", notes: "Design tool", color: "bg-violet-500", currency: "USD" }
 ];
 
 export const initialFinanceState: FinanceState = {
@@ -265,19 +299,19 @@ export const initialFinanceState: FinanceState = {
   categories,
   accounts: accounts.map(a => ({...a, currency: "USD"})),
   budgets: [
-    { id: "budget-software", categoryId: "software", category: "Software", limit: 500, color: "bg-violet-500", month: "2026-06" },
-    { id: "budget-office", categoryId: "office", category: "Office", limit: 300, color: "bg-blue-500", month: "2026-06" },
-    { id: "budget-travel", categoryId: "travel", category: "Travel", limit: 1500, color: "bg-amber-500", month: "2026-06" },
-    { id: "budget-marketing", categoryId: "marketing", category: "Marketing", limit: 2000, color: "bg-rose-500", month: "2026-06" },
-    { id: "budget-groceries", categoryId: "groceries", category: "Groceries", limit: 800, color: "bg-emerald-500", month: "2026-06" },
-    { id: "budget-dining", categoryId: "dining-out", category: "Dining Out", limit: 400, color: "bg-pink-500", month: "2026-06" },
-  ].map(b => ({...b, currency: "USD"})),
+    { id: "budget-software", categoryId: "software", category: "Software", limit: 500, color: "bg-violet-500", month: "2026-06", currency: "USD" },
+    { id: "budget-office", categoryId: "office", category: "Office", limit: 300, color: "bg-blue-500", month: "2026-06", currency: "USD" },
+    { id: "budget-travel", categoryId: "travel", category: "Travel", limit: 1500, color: "bg-amber-500", month: "2026-06", currency: "USD" },
+    { id: "budget-marketing", categoryId: "marketing", category: "Marketing", limit: 2000, color: "bg-rose-500", month: "2026-06", currency: "USD" },
+    { id: "budget-groceries", categoryId: "groceries", category: "Groceries", limit: 800, color: "bg-emerald-500", month: "2026-06", currency: "USD" },
+    { id: "budget-dining", categoryId: "dining-out", category: "Dining Out", limit: 400, color: "bg-pink-500", month: "2026-06", currency: "USD" },
+  ],
   goals: [
-    { id: "goal-emergency", name: "Emergency Fund", target: 20000, current: 15400, type: "savings", icon: "Target", color: "bg-emerald-500", due: "Dec 2026" },
-    { id: "goal-house", name: "House Down Payment", target: 80000, current: 42500, type: "savings", icon: "Home", color: "bg-blue-500", due: "Jun 2027" },
-    { id: "goal-macbooks", name: "New Studio MacBooks", target: 6000, current: 1200, type: "expense-reduction", icon: "Laptop", color: "bg-purple-500", due: "Feb 2027" },
-    { id: "goal-japan", name: "Japan Trip", target: 5000, current: 5000, type: "savings", icon: "Plane", color: "bg-amber-500", due: "Nov 2026", achieved: true },
-  ].map(g => ({...g, currency: "USD"})),
+    { id: "goal-emergency", name: "Emergency Fund", target: 20000, current: 15400, type: "savings", icon: "Target", color: "bg-emerald-500", due: "Dec 2026", currency: "USD" },
+    { id: "goal-house", name: "House Down Payment", target: 80000, current: 42500, type: "savings", icon: "Home", color: "bg-blue-500", due: "Jun 2027", currency: "USD" },
+    { id: "goal-macbooks", name: "New Studio MacBooks", target: 6000, current: 1200, type: "expense-reduction", icon: "Laptop", color: "bg-purple-500", due: "Feb 2027", currency: "USD" },
+    { id: "goal-japan", name: "Japan Trip", target: 5000, current: 5000, type: "savings", icon: "Plane", color: "bg-amber-500", due: "Nov 2026", achieved: true, currency: "USD" },
+  ],
   recurringPayments: [
     { id: "rec-aws", name: "Amazon Web Services", amount: -340.5, categoryId: "software", accountId: "brex-card", nextDate: "2026-06-28", frequency: "Monthly", autoPay: true },
     { id: "rec-adobe", name: "Adobe Creative Cloud", amount: -54.99, categoryId: "software", accountId: "brex-card", nextDate: "2026-07-01", frequency: "Monthly", autoPay: true },
@@ -293,12 +327,14 @@ export const initialFinanceState: FinanceState = {
     email: "alex.jensen@example.com",
     currency: "USD",
     dateFormat: "MMM d, yyyy",
-    theme: "dark",
+    theme: "theme-dark",
     backupSchedule: "Off",
+    customCurrencies: ["USD", "EUR", "GBP", "BDT", "ETH"],
+    avatarUrl: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=150&auto=format&fit=crop",
   },
-  loanEntities: initialLoanEntities.map(l => ({...l, currency: "USD"})),
-  loanTransactions: initialLoanTransactions.map(l => ({...l, currency: "USD"})),
-  subscriptions: initialSubscriptions.map(s => ({...s, currency: "USD"})),
+  loanEntities: initialLoanEntities,
+  loanTransactions: initialLoanTransactions,
+  subscriptions: initialSubscriptions,
   subscriptionOverrides: [],
 };
 
@@ -322,6 +358,7 @@ interface FinanceContextValue {
     cashFlow: number;
   };
   exchangeRates: Record<string, number>;
+  fetchLiveRates: () => Promise<void>;
   addTransaction: (transaction: NewTransactionInput) => string;
   updateTransaction: (id: string, changes: Partial<NewTransactionInput & Pick<FinanceTransaction, "status">>) => void;
   deleteTransaction: (id: string) => void;
@@ -336,7 +373,7 @@ interface FinanceContextValue {
   addAccount: (name: string, type: string, openingBalance: number, color?: string, stroke?: string, currency?: string) => void;
   updateAccount: (id: string, changes: Partial<AccountRecord>) => void;
   archiveAccount: (id: string) => void;
-  addBudget: (categoryId: string, limit: number, color: string, month: string, currency?: string) => void;
+  addBudget: (categoryId: string, limit: number, color: string, currency: string, targetType?: "category" | "account") => void;
   updateBudget: (id: string, changes: Partial<BudgetRecord>) => void;
   addGoal: (goal: Omit<GoalRecord, "id">) => void;
   updateGoal: (id: string, changes: Partial<GoalRecord>) => void;
@@ -367,6 +404,21 @@ interface FinanceContextValue {
   skipSubscription: (id: string) => void;
   rewindSubscription: (id: string) => void;
   paySubscription: (id: string) => void;
+  
+  // Workspaces
+  workspaces: Workspace[];
+  activeWorkspaceId: string;
+  createWorkspace: (name: string) => void;
+  switchWorkspace: (id: string) => void;
+  renameWorkspace: (id: string, name: string) => void;
+  deleteWorkspace: (id: string) => void;
+  
+  // Custom currencies
+  currencies: string[];
+
+  // Alerts
+  smartAlerts: Array<{ id: string; type: string; icon: any; message: string }>;
+  dismissAlert: (id: string) => void;
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null);
@@ -484,7 +536,7 @@ function withResolvedNames(state: FinanceState, transaction: NewTransactionInput
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(indexedDbName, 1);
+    const request = indexedDB.open(getIndexedDbName(), 1);
 
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -518,12 +570,17 @@ async function writeIndexedState(state: FinanceState) {
     const transaction = db.transaction(indexedStoreName, "readwrite");
     transaction.objectStore(indexedStoreName).put(state, indexedStateKey);
     transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+    transaction.onerror = () => {
+      console.error("IndexedDB write failed:", transaction.error);
+      reject(transaction.error);
+    };
+  }).catch(err => {
+    console.error("Write catch:", err);
   });
 }
 
 function migrateIndexedState(stored: FinanceState | null) {
-  if (!stored) return migrateLegacyTransactions(initialFinanceState);
+  if (!stored) return initialFinanceState;
 
   const merged = {
     ...initialFinanceState,
@@ -615,6 +672,81 @@ export function downloadTextFile(filename: string, content: string, type = "text
   downloadFile(filename, content, type);
 }
 
+function checkAndAutoPaySubscriptions(state: FinanceState): FinanceState {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  let updatedSubscriptions = [...state.subscriptions];
+  let updatedTransactions = [...state.transactions];
+  let updatedOverrides = [...state.subscriptionOverrides];
+  let stateChanged = false;
+
+  for (let i = 0; i < updatedSubscriptions.length; i++) {
+    const sub = updatedSubscriptions[i];
+    if (sub.status !== "active") continue;
+
+    let currentNextDueDate = sub.nextDueDate;
+    // Keep paying as long as the next due date is in the past or today
+    while (currentNextDueDate <= todayStr) {
+      stateChanged = true;
+      const currentPeriod = currentNextDueDate.slice(0, 7);
+      const override = updatedOverrides.find(o => o.subscriptionId === sub.id && o.period === currentPeriod);
+
+      if (override?.skipped) {
+        currentNextDueDate = advanceNextDueDate(currentNextDueDate, sub.frequency, sub.customIntervalDays);
+        updatedOverrides = updatedOverrides.filter(o => o.id !== override.id);
+        continue;
+      }
+
+      const amount = override?.amount ?? sub.amount;
+      const date = override?.date ?? currentNextDueDate;
+      const accountId = override?.accountId ?? sub.accountId;
+
+      const category = state.categories.find(c => c.id === sub.categoryId);
+      const account = state.accounts.find(a => a.id === accountId);
+
+      const txnId = createId("txn");
+      const newTxn: FinanceTransaction = {
+        id: txnId,
+        date,
+        description: sub.name,
+        categoryId: sub.categoryId,
+        category: category?.name ?? "Uncategorized",
+        accountId,
+        account: account?.name ?? "Unknown account",
+        amount: -Math.abs(amount),
+        type: "expense",
+        status: "Completed",
+        notes: "Subscription payment (Auto-paid)",
+        tags: ["subscription"],
+        attachments: [],
+        currency: sub.currency || "USD",
+      };
+
+      updatedTransactions.unshift(newTxn);
+      if (override) {
+        updatedOverrides = updatedOverrides.filter(o => o.id !== override.id);
+      }
+      currentNextDueDate = advanceNextDueDate(currentNextDueDate, sub.frequency, sub.customIntervalDays);
+    }
+
+    if (currentNextDueDate !== sub.nextDueDate) {
+      updatedSubscriptions[i] = {
+        ...sub,
+        nextDueDate: currentNextDueDate
+      };
+    }
+  }
+
+  if (stateChanged) {
+    return {
+      ...state,
+      subscriptions: updatedSubscriptions,
+      transactions: updatedTransactions,
+      subscriptionOverrides: updatedOverrides
+    };
+  }
+  return state;
+}
+
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<FinanceState>(initialFinanceState);
   const [isReady, setIsReady] = useState(false);
@@ -626,16 +758,29 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       .then(async (stored) => {
         if (!isMounted) return;
         
-        let rates = stored.exchangeRates && Object.keys(stored.exchangeRates).length > 1 
+        let rates = stored?.exchangeRates && Object.keys(stored.exchangeRates).length > 1 
           ? stored.exchangeRates 
           : { USD: 1 };
 
         try {
           const res = await fetch("https://open.er-api.com/v6/latest/USD");
           const data = await res.json();
-          if (data && data.rates) rates = data.rates;
+          if (data && data.rates) rates = { ...rates, ...data.rates };
         } catch (e) {
           console.error("Failed to fetch rates, falling back to cached rates", e);
+        }
+
+        try {
+          const ethRes = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT");
+          const ethData = await ethRes.json();
+          if (ethData && ethData.price) {
+            rates["ETH"] = 1 / Number(ethData.price);
+          }
+        } catch (e) {
+          console.error("Failed to fetch ETH rate", e);
+          if (!rates["ETH"]) {
+            rates["ETH"] = 1 / 3000;
+          }
         }
 
         const migratedState = migrateIndexedState(stored);
@@ -645,12 +790,73 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       })
       .finally(() => {
         if (isMounted) setIsReady(true);
+      })
+      .catch((err) => {
+        console.error("Failed to read indexed state", err);
+        if (!isMounted) return;
+        setState(initialFinanceState);
+        setIsReady(true);
       });
 
     return () => {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+    const theme = state.settings.theme;
+    if (theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [state.settings.theme, isReady]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    const interval = setInterval(() => {
+      setState(s => checkAndAutoPaySubscriptions(s));
+    }, 60 * 60 * 1000);
+    setState(s => checkAndAutoPaySubscriptions(s));
+    return () => clearInterval(interval);
+  }, [isReady]);
+
+  const fetchLiveRates = async () => {
+    let newRates = { ...state.exchangeRates };
+    try {
+      const res = await fetch("https://open.er-api.com/v6/latest/USD");
+      const data = await res.json();
+      if (data && data.rates) newRates = { ...newRates, ...data.rates };
+    } catch (e) {
+      console.error("Failed to fetch rates", e);
+    }
+
+    try {
+      const ethRes = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT");
+      const ethData = await ethRes.json();
+      if (ethData && ethData.price) {
+        newRates["ETH"] = 1 / Number(ethData.price);
+      }
+    } catch (e) {
+      console.error("Failed to fetch ETH rate", e);
+    }
+    setState(s => {
+      const updated = { ...s, exchangeRates: newRates };
+      writeIndexedState(updated);
+      return updated;
+    });
+  };
+
+  useEffect(() => {
+    if (!isReady) return;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const hasPastDue = state.subscriptions.some(s => s.status === "active" && s.nextDueDate <= todayStr);
+    
+    if (hasPastDue) {
+      setState(current => checkAndAutoPaySubscriptions(current));
+    }
+  }, [isReady, state.subscriptions]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -667,28 +873,68 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const accountBalances = useMemo(() => {
     const balances = Object.fromEntries(state.accounts.map((account) => [account.id, account.openingBalance]));
+    const accountCurrencies = Object.fromEntries(state.accounts.map((account) => [account.id, account.currency || "USD"]));
 
     for (const transaction of state.transactions) {
-      balances[transaction.accountId] = (balances[transaction.accountId] ?? 0) + transaction.amount;
+      const txCurrency = transaction.currency || "USD";
+      const acctCurrency = accountCurrencies[transaction.accountId] || "USD";
+      
+      let amountToAdd = transaction.amount;
+      if (txCurrency !== acctCurrency) {
+        const txRate = state.exchangeRates[txCurrency] || 1;
+        const acctRate = state.exchangeRates[acctCurrency] || 1;
+        amountToAdd = (transaction.amount / txRate) * acctRate;
+      }
+      
+      balances[transaction.accountId] = (balances[transaction.accountId] ?? 0) + amountToAdd;
+      
       if (transaction.type === "transfer" && transaction.transferAccountId) {
-        balances[transaction.transferAccountId] = (balances[transaction.transferAccountId] ?? 0) + Math.abs(transaction.amount);
+        const destAcctCurrency = accountCurrencies[transaction.transferAccountId] || "USD";
+        let destAmountToAdd = transaction.destinationAmount;
+        
+        if (destAmountToAdd === undefined) {
+          if (txCurrency !== destAcctCurrency) {
+            const txRate = state.exchangeRates[txCurrency] || 1;
+            const destRate = state.exchangeRates[destAcctCurrency] || 1;
+            destAmountToAdd = (Math.abs(transaction.amount) / txRate) * destRate;
+          } else {
+            destAmountToAdd = Math.abs(transaction.amount);
+          }
+        }
+        
+        balances[transaction.transferAccountId] = (balances[transaction.transferAccountId] ?? 0) + destAmountToAdd;
       }
     }
 
     return balances;
-  }, [state.accounts, state.transactions]);
+  }, [state.accounts, state.transactions, state.exchangeRates]);
 
   const totals = useMemo(() => {
     const nonTransfers = state.transactions.filter((transaction) => transaction.type !== "transfer");
+    
     const monthlyIncome = nonTransfers
       .filter((transaction) => transaction.type === "income")
-      .reduce((sum, transaction) => sum + Math.abs(transaction.amount), 0);
+      .reduce((sum, transaction) => {
+         const txCurrency = transaction.currency || "USD";
+         const rate = state.exchangeRates[txCurrency] || 1;
+         return sum + (Math.abs(transaction.amount) / rate);
+      }, 0);
+      
     const monthlyExpenses = nonTransfers
       .filter((transaction) => transaction.type === "expense")
-      .reduce((sum, transaction) => sum + Math.abs(transaction.amount), 0);
+      .reduce((sum, transaction) => {
+         const txCurrency = transaction.currency || "USD";
+         const rate = state.exchangeRates[txCurrency] || 1;
+         return sum + (Math.abs(transaction.amount) / rate);
+      }, 0);
+      
     const totalBalance = activeAccounts
       .filter((account) => account.type !== "Credit Card")
-      .reduce((sum, account) => sum + (accountBalances[account.id] ?? 0), 0);
+      .reduce((sum, account) => {
+         const bal = accountBalances[account.id] ?? 0;
+         const rate = state.exchangeRates[account.currency || "USD"] || 1;
+         return sum + (bal / rate);
+      }, 0);
 
     return {
       totalBalance,
@@ -697,7 +943,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       netProfit: 28129.55 + monthlyIncome - (14975.2 + monthlyExpenses),
       cashFlow: 4504.35 + monthlyIncome - monthlyExpenses,
     };
-  }, [accountBalances, activeAccounts, state.transactions]);
+  }, [accountBalances, activeAccounts, state.transactions, state.exchangeRates]);
 
   const upcomingPayments = useMemo(() => {
     return state.subscriptions
@@ -728,7 +974,40 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       })
       .filter((p): p is NonNullable<typeof p> => p !== null)
       .sort((a, b) => a.nextDate.localeCompare(b.nextDate));
-  }, [state.subscriptions, state.subscriptionOverrides, state.accounts]);
+  }, [state.subscriptions, state.subscriptionOverrides, state.accounts, state.exchangeRates]);
+
+  const smartAlerts = useMemo(() => {
+    const alerts: Array<{ id: string; type: string; icon: any; message: string }> = [];
+    const now = new Date();
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const dueSubs = state.subscriptions.filter(s => s.status === 'active' && new Date(s.nextDueDate) <= nextWeek && new Date(s.nextDueDate) >= now);
+
+    if (dueSubs.length > 0) alerts.push({ id: 'subs', type: 'warning', icon: AlertCircle, message: `You have ${dueSubs.length} subscription(s) due in the next 7 days totaling ${formatCurrency(dueSubs.reduce((a, b) => a + b.amount, 0))}` });
+
+    state.budgets.forEach(b => {
+      const spent = state.transactions.filter(t => {
+        if (t.type !== 'expense') return false;
+        if (b.targetType === "account") return t.accountId === b.categoryId;
+        return t.categoryId === b.categoryId;
+      }).reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      
+      const targetName = b.targetType === "account" ? `Account: ${b.category}` : `Category: ${b.category}`;
+      if (spent >= b.limit * 0.9 && spent < b.limit) alerts.push({ id: `budget-${b.id}`, type: 'warning', icon: AlertCircle, message: `Your '${targetName}' budget is at ${Math.round((spent/b.limit)*100)}% capacity!` });
+      else if (spent >= b.limit) alerts.push({ id: `budget-${b.id}`, type: 'danger', icon: AlertCircle, message: `You have exceeded your '${targetName}' budget by ${formatCurrency(spent - b.limit)}.` });
+    });
+
+    const expenses = state.transactions.filter(t => t.type === 'expense' && t.categoryId !== 'transfer');
+    if (expenses.length > 0) {
+      const largest = [...expenses].sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
+      const avg = expenses.reduce((s, t) => s + Math.abs(t.amount), 0) / expenses.length;
+      if (Math.abs(largest.amount) > avg * 3 && Math.abs(largest.amount) > 100) {
+         alerts.push({ id: `anomaly-${largest.id}`, type: 'info', icon: Zap, message: `Anomaly detected: '${largest.description}' was unusually high (${formatCurrency(Math.abs(largest.amount))}).` });
+      }
+    }
+    
+    const dismissed = state.settings.dismissedAlerts || [];
+    return alerts.filter(a => !dismissed.includes(a.id));
+  }, [state.subscriptions, state.budgets, state.transactions, state.settings.dismissedAlerts]);
 
   const contextValue = useMemo<FinanceContextValue>(() => {
     function setAndResolve(update: (current: FinanceState) => FinanceState) {
@@ -749,6 +1028,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       accountBalances,
       totals,
       exchangeRates: state.exchangeRates,
+      fetchLiveRates,
       addTransaction: (transaction) => {
         const id = createId("txn");
         setAndResolve((current) => ({
@@ -949,14 +1229,28 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         }));
         toast.info("Account archived");
       },
-      addBudget: (categoryId, limit, color, month, currency) => {
+      addBudget: (categoryId, limit, color, currency, targetType = "category") => {
         setAndResolve((current) => {
-          const category = current.categories.find((c) => c.id === categoryId);
+          let categoryName = "Unknown";
+          if (targetType === "category") {
+            categoryName = current.categories.find((c) => c.id === categoryId)?.name || "Unknown";
+          } else {
+            categoryName = current.accounts.find((a) => a.id === categoryId)?.name || "Unknown";
+          }
           return {
             ...current,
             budgets: [
               ...current.budgets,
-              { id: "budget-" + Date.now(), categoryId, category: category?.name ?? "Unknown", limit, color, month, currency: currency || "USD" },
+              {
+                id: crypto.randomUUID(),
+                categoryId,
+                category: categoryName,
+                targetType,
+                limit,
+                color,
+                month: new Date().toISOString().slice(0, 7),
+                currency
+              },
             ],
           };
         });
@@ -1217,7 +1511,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           }
 
           const amount = override?.amount ?? sub.amount;
-          const date = override?.date ?? sub.nextDueDate;
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const date = override?.date ?? (sub.nextDueDate > todayStr ? todayStr : sub.nextDueDate);
           const accountId = override?.accountId ?? sub.accountId;
 
           const category = current.categories.find(c => c.id === sub.categoryId);
@@ -1238,7 +1533,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
             notes: "Subscription payment",
             tags: ["subscription"],
             attachments: [],
-            currency: sub.currency,
+            currency: sub.currency || "USD",
           };
 
           return {
@@ -1272,8 +1567,63 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         });
         toast.info("Subscription payment undone");
       },
+      workspaces: getWorkspaces(),
+      activeWorkspaceId: getActiveWorkspaceId(),
+      createWorkspace: (name: string) => {
+        const id = createId("ws");
+        const ws = getWorkspaces();
+        ws.push({ id, name });
+        setWorkspaces(ws);
+        setActiveWorkspaceId(id);
+        window.location.reload();
+      },
+      switchWorkspace: (id: string) => {
+        setActiveWorkspaceId(id);
+        window.location.reload();
+      },
+      renameWorkspace: (id: string, name: string) => {
+        const ws = getWorkspaces().map(w => w.id === id ? { ...w, name } : w);
+        setWorkspaces(ws);
+        window.location.reload();
+      },
+      deleteWorkspace: (id: string) => {
+        const ws = getWorkspaces().filter(w => w.id !== id);
+        if (ws.length === 0) {
+          ws.push({ id: "default", name: "Personal" });
+        }
+        setWorkspaces(ws);
+        
+        indexedDB.deleteDatabase(`flowledger-workspace-${id}`);
+        
+        if (getActiveWorkspaceId() === id) {
+          setActiveWorkspaceId(ws[0].id);
+        }
+        window.location.reload();
+      },
+      currencies: state.settings.customCurrencies || ["USD", "EUR", "GBP", "BDT", "ETH"],
+      smartAlerts,
+      dismissAlert: (id: string) => {
+        setAndResolve((current) => {
+          const dismissedAlerts = current.settings.dismissedAlerts ? [...current.settings.dismissedAlerts] : [];
+          if (!dismissedAlerts.includes(id)) {
+            dismissedAlerts.push(id);
+          }
+          return {
+            ...current,
+            settings: { ...current.settings, dismissedAlerts }
+          };
+        });
+      },
     };
-  }, [state, isReady, transactions, activeCategories, activeAccounts, accountBalances, totals, upcomingPayments]);
+  }, [state, isReady, transactions, activeCategories, activeAccounts, accountBalances, totals, upcomingPayments, smartAlerts]);
+
+  if (!isReady) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return <FinanceContext.Provider value={contextValue}>{children}</FinanceContext.Provider>;
 }

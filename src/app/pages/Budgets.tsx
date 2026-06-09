@@ -13,16 +13,19 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { ColorSelect } from '../components/ui/ColorSelect';
 
 function BudgetModal({ budget, onClose }: { budget?: BudgetRecord; onClose: () => void }) {
-  const { categories, addBudget, updateBudget } = useFinance();
-  const [categoryId, setCategoryId] = useState(budget?.categoryId ?? categories[0]?.id ?? "");
+  const { categories, accounts, addBudget, updateBudget, currencies } = useFinance();
+  const [targetType, setTargetType] = useState<"category" | "account">(budget?.targetType ?? "category");
+  const [categoryId, setCategoryId] = useState(budget?.targetType === "account" ? categories[0]?.id ?? "" : budget?.categoryId ?? categories[0]?.id ?? "");
+  const [accountId, setAccountId] = useState(budget?.targetType === "account" ? budget?.categoryId ?? accounts[0]?.id ?? "" : accounts[0]?.id ?? "");
   const [limit, setLimit] = useState(String(budget?.limit ?? 500));
   const [color, setColor] = useState(budget?.color ?? "bg-indigo-500");
   const [currency, setCurrency] = useState((budget as any)?.currency ?? "USD");
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (budget) updateBudget(budget.id, { limit: Number(limit), categoryId, color, currency } as any);
-    else (addBudget as any)(categoryId, Number(limit), color, currency);
+    const targetId = targetType === "category" ? categoryId : accountId;
+    if (budget) updateBudget(budget.id, { limit: Number(limit), categoryId: targetId, color, currency, targetType });
+    else addBudget(targetId, Number(limit), color, currency, targetType);
     onClose();
   }
 
@@ -36,12 +39,43 @@ function BudgetModal({ budget, onClose }: { budget?: BudgetRecord; onClose: () =
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Category</label>
-            <CustomSelect 
-              value={categoryId} 
-              onChange={(val) => setCategoryId(val)} 
-              options={categories.filter((category) => category.type !== "income").map((category) => ({ label: category.name, value: category.id }))} 
-            />
+            <div className="flex bg-zinc-950/50 p-1 rounded-lg border border-zinc-800/50 mb-4">
+              <button
+                type="button"
+                onClick={() => setTargetType("category")}
+                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  targetType === "category" ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Category Budget
+              </button>
+              <button
+                type="button"
+                onClick={() => setTargetType("account")}
+                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  targetType === "account" ? "bg-zinc-800 text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Account Budget
+              </button>
+            </div>
+            
+            <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+              {targetType === "category" ? "Category" : "Account"}
+            </label>
+            {targetType === "category" ? (
+              <CustomSelect 
+                value={categoryId} 
+                onChange={(val) => setCategoryId(val)} 
+                options={categories.filter((category) => category.type !== "income").map((category) => ({ label: category.name, value: category.id }))} 
+              />
+            ) : (
+              <CustomSelect 
+                value={accountId} 
+                onChange={(val) => setAccountId(val)} 
+                options={accounts.map((account) => ({ label: account.name, value: account.id }))} 
+              />
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-zinc-400 mb-1.5">Monthly Limit</label>
@@ -52,12 +86,7 @@ function BudgetModal({ budget, onClose }: { budget?: BudgetRecord; onClose: () =
             <CustomSelect 
               value={currency} 
               onChange={(val) => setCurrency(val)} 
-              options={[
-                {label: "USD", value: "USD"},
-                {label: "EUR", value: "EUR"},
-                {label: "GBP", value: "GBP"},
-                {label: "BDT", value: "BDT"}
-              ]} 
+              options={currencies.map(c => ({ label: c, value: c }))} 
             />
           </div>
           <div>
@@ -82,7 +111,11 @@ export function Budgets() {
   const enrichedBudgets = useMemo(() => {
     return budgets.map((budget) => {
       const spent = transactions
-        .filter((transaction) => transaction.categoryId === budget.categoryId && transaction.type === "expense")
+        .filter((transaction) => {
+          if (transaction.type !== "expense") return false;
+          if (budget.targetType === "account") return transaction.accountId === budget.categoryId;
+          return transaction.categoryId === budget.categoryId;
+        })
         .reduce((sum, transaction) => sum + Math.abs(transaction.amount), 0);
       return { ...budget, spent };
     });

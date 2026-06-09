@@ -222,6 +222,7 @@ export function Loans() {
 }
 
 function EntityModal({ onClose, onSubmit }: { onClose: () => void, onSubmit: (name: string, category: "bank" | "individual", notes: string, color?: string, currency?: string) => void }) {
+  const { currencies } = useFinance();
   const [name, setName] = useState("");
   const [category, setCategory] = useState<"bank" | "individual">("individual");
   const [notes, setNotes] = useState("");
@@ -261,12 +262,7 @@ function EntityModal({ onClose, onSubmit }: { onClose: () => void, onSubmit: (na
             <CustomSelect 
               value={currency} 
               onChange={val => setCurrency(val)} 
-              options={[
-                {label: "USD", value: "USD"},
-                {label: "EUR", value: "EUR"},
-                {label: "GBP", value: "GBP"},
-                {label: "BDT", value: "BDT"}
-              ]} 
+              options={currencies.map(c => ({ label: c, value: c }))} 
             />
           </div>
           <div>
@@ -288,7 +284,7 @@ function EntityModal({ onClose, onSubmit }: { onClose: () => void, onSubmit: (na
 }
 
 function TransactionModal({ onClose, entities, onSubmit }: { onClose: () => void, entities: any[], onSubmit: (entityId: string, amount: number, type: "lent" | "borrowed", date: string, notes: string, accountId: string, currency: string) => void }) {
-  const { accounts } = useFinance();
+  const { accounts, currencies } = useFinance();
   const [entityId, setEntityId] = useState(entities[0]?.id || "");
   const [amount, setAmount] = useState("");
   const [type, setType] = useState<"lent" | "borrowed">("lent");
@@ -335,12 +331,7 @@ function TransactionModal({ onClose, entities, onSubmit }: { onClose: () => void
             <CustomSelect 
               value={currency} 
               onChange={val => setCurrency(val)} 
-              options={[
-                {label: "USD", value: "USD"},
-                {label: "EUR", value: "EUR"},
-                {label: "GBP", value: "GBP"},
-                {label: "BDT", value: "BDT"}
-              ]} 
+              options={currencies.map(c => ({ label: c, value: c }))} 
             />
           </div>
           <div>

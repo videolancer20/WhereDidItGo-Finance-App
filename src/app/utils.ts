@@ -6,13 +6,21 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const formatCurrency = (amount: number, currency: string = "USD") => {
-  if (currency === "BDT") {
+  const cleanCurrency = (currency || "USD").toUpperCase();
+  if (cleanCurrency === "BDT") {
     return `৳${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-  }).format(amount);
+  if (cleanCurrency === "ETH") {
+    return `Ξ${amount.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })} ETH`;
+  }
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: cleanCurrency,
+    }).format(amount);
+  } catch (e) {
+    return `${cleanCurrency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
 };
 
 export function convertCurrency(amount: number, from: string, to: string, rates: Record<string, number>): number {

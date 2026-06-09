@@ -12,7 +12,7 @@ interface TransactionDetailModalProps {
 }
 
 export function TransactionDetailModal({ transaction, onClose, onEdit }: TransactionDetailModalProps) {
-  const { updateTransaction, deleteTransaction, duplicateTransaction } = useFinance();
+  const { updateTransaction, deleteTransaction, duplicateTransaction, exchangeRates } = useFinance();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [notes, setNotes] = useState(transaction.notes || "");
   const [isEditing, setIsEditing] = useState(false);
@@ -117,7 +117,7 @@ export function TransactionDetailModal({ transaction, onClose, onEdit }: Transac
             <div>
               <p className="text-xs font-medium text-zinc-500 mb-1">Amount</p>
               <p className={`text-xl font-semibold ${amountColor}`}>
-                {transaction.type === "income" ? "+" : transaction.type === "expense" ? "-" : ""}{formatCurrency(Math.abs(transaction.amount))}
+                {transaction.type === "income" ? "+" : transaction.type === "expense" ? "-" : ""}{formatCurrency(Math.abs(transaction.amount), transaction.currency || "USD")}
               </p>
             </div>
             <div>
@@ -151,6 +151,13 @@ export function TransactionDetailModal({ transaction, onClose, onEdit }: Transac
               </div>
             )}
           </div>
+
+          {transaction.currency === "ETH" && exchangeRates["ETH"] && (
+            <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex flex-wrap items-center justify-between text-sm">
+              <span className="text-indigo-400">Rate: <strong className="text-indigo-300">1 Ξ ≈ {formatCurrency(1 / exchangeRates["ETH"], "USD")}</strong></span>
+              <span className="text-indigo-400">Total Value: <strong className="text-indigo-300">{formatCurrency(Math.abs(transaction.amount) / exchangeRates["ETH"], "USD")}</strong></span>
+            </div>
+          )}
 
           {/* Notes */}
           <div>

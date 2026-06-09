@@ -35,7 +35,7 @@ interface AccountModalProps {
 }
 
 function AccountModal({ account, mode, onClose }: AccountModalProps) {
-  const { accounts, addAccount, updateAccount, archiveAccount, addTransfer, accountBalances } = useFinance();
+  const { accounts, addAccount, updateAccount, archiveAccount, addTransfer, accountBalances, currencies } = useFinance();
   const [name, setName] = useState(account?.name ?? "");
   const [type, setType] = useState(account?.type ?? "Bank Account");
   const [balance, setBalance] = useState(String(account ? accountBalances[account.id] ?? account.openingBalance : 0));
@@ -137,12 +137,7 @@ function AccountModal({ account, mode, onClose }: AccountModalProps) {
                 <CustomSelect 
                   value={currency} 
                   onChange={(val) => setCurrency(val)} 
-                  options={[
-                    {label: "USD", value: "USD"},
-                    {label: "EUR", value: "EUR"},
-                    {label: "GBP", value: "GBP"},
-                    {label: "BDT", value: "BDT"}
-                  ]} 
+                  options={currencies.map(c => ({ label: c, value: c }))} 
                 />
               </div>
               <div>

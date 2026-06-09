@@ -1,15 +1,213 @@
 @import "tailwindcss";
 
 @theme {
-  --color-zinc-950: #09090b;
-  --color-zinc-900: #18181b;
-  --color-zinc-800: #27272a;
+  --color-zinc-50: var(--zinc-50);
+  --color-zinc-100: var(--zinc-100);
+  --color-zinc-200: var(--zinc-200);
+  --color-zinc-300: var(--zinc-300);
+  --color-zinc-400: var(--zinc-400);
+  --color-zinc-500: var(--zinc-500);
+  --color-zinc-600: var(--zinc-600);
+  --color-zinc-700: var(--zinc-700);
+  --color-zinc-800: var(--zinc-800);
+  --color-zinc-900: var(--zinc-900);
+  --color-zinc-950: var(--zinc-950);
+
+  --color-indigo-300: var(--accent-300);
+  --color-indigo-400: var(--accent-400);
+  --color-indigo-500: var(--accent-500);
+  --color-indigo-600: var(--accent-600);
 }
 
 @layer base {
-  body {
-    background-color: var(--color-zinc-950);
-    color: white;
+  :root, .theme-dark, .dark {
+    --zinc-50: #fafafa;
+    --zinc-100: #f4f4f5;
+    --zinc-200: #e4e4e7;
+    --zinc-300: #d4d4d8;
+    --zinc-400: #a1a1aa;
+    --zinc-500: #71717a;
+    --zinc-600: #52525b;
+    --zinc-700: #3f3f46;
+    --zinc-800: #27272a;
+    --zinc-900: #18181b;
+    --zinc-950: #09090b;
+    --accent-300: #a5b4fc;
+    --accent-400: #818cf8;
+    --accent-500: #6366f1;
+    --accent-600: #4f46e5;
+  }
+
+  .theme-light {
+    --zinc-50: #09090b;
+    --zinc-100: #18181b;
+    --zinc-200: #27272a;
+    --zinc-300: #3f3f46;
+    --zinc-400: #52525b;
+    --zinc-500: #71717a;
+    --zinc-600: #a1a1aa;
+    --zinc-700: #d4d4d8;
+    --zinc-800: #e4e4e7;
+    --zinc-900: #f4f4f5;
+    --zinc-950: #ffffff;
+    --accent-300: #6366f1;
+    --accent-400: #4f46e5;
+    --accent-500: #4338ca;
+    --accent-600: #3730a3;
+  }
+
+  .theme-midnight {
+    --zinc-50: #f8fafc;
+    --zinc-100: #f1f5f9;
+    --zinc-200: #e2e8f0;
+    --zinc-300: #cbd5e1;
+    --zinc-400: #94a3b8;
+    --zinc-500: #64748b;
+    --zinc-600: #475569;
+    --zinc-700: #334155;
+    --zinc-800: #1e293b;
+    --zinc-900: #0f172a;
+    --zinc-950: #020617;
+    --accent-300: #67e8f9;
+    --accent-400: #22d3ee;
+    --accent-500: #06b6d4;
+    --accent-600: #0891b2;
+  }
+
+  .theme-forest {
+    --zinc-50: #f0fdf4;
+    --zinc-100: #dcfce7;
+    --zinc-200: #bbf7d0;
+    --zinc-300: #86efac;
+    --zinc-400: #4ade80;
+    --zinc-500: #22c55e;
+    --zinc-600: #16a34a;
+    --zinc-700: #15803d;
+    --zinc-800: #14532d;
+    --zinc-900: #064e3b;
+    --zinc-950: #052e16;
+    --accent-300: #6ee7b7;
+    --accent-400: #34d399;
+    --accent-500: #10b981;
+    --accent-600: #059669;
+  }
+
+  .theme-sunset {
+    --zinc-50: #fff1f2;
+    --zinc-100: #ffe4e6;
+    --zinc-200: #fecdd3;
+    --zinc-300: #fda4af;
+    --zinc-400: #fb7185;
+    --zinc-500: #f43f5e;
+    --zinc-600: #e11d48;
+    --zinc-700: #be123c;
+    --zinc-800: #5b2836;
+    --zinc-900: #3f1d24;
+    --zinc-950: #2a1115;
+    --accent-300: #fda4af;
+    --accent-400: #fb7185;
+    --accent-500: #f43f5e;
+    --accent-600: #e11d48;
+  }
+
+  .theme-dracula {
+    --zinc-50: #f8f8f2;
+    --zinc-100: #e6e6e6;
+    --zinc-200: #d5d5d5;
+    --zinc-300: #bfcbfa;
+    --zinc-400: #8ba4df;
+    --zinc-500: #6272a4;
+    --zinc-600: #5a648e;
+    --zinc-700: #525a7a;
+    --zinc-800: #44475a;
+    --zinc-900: #3b3e52;
+    --zinc-950: #282a36;
+    --accent-300: #ffb86c;
+    --accent-400: #ff79c6;
+    --accent-500: #bd93f9;
+    --accent-600: #ff5555;
+  }
+
+  .theme-nord {
+    --zinc-50: #eceff4;
+    --zinc-100: #e5e9f0;
+    --zinc-200: #d8dee9;
+    --zinc-300: #c2cbd8;
+    --zinc-400: #aeb5c0;
+    --zinc-500: #8fbcbb;
+    --zinc-600: #4c566a;
+    --zinc-700: #434c5e;
+    --zinc-800: #3b4252;
+    --zinc-900: #353b49;
+    --zinc-950: #2e3440;
+    --accent-300: #88c0d0;
+    --accent-400: #81a1c1;
+    --accent-500: #5e81ac;
+    --accent-600: #8fbcbb;
+  }
+
+  .theme-cyberpunk {
+    --zinc-50: #fce300;
+    --zinc-100: #e6ce00;
+    --zinc-200: #cccccc;
+    --zinc-300: #bbbbbb;
+    --zinc-400: #aaaaaa;
+    --zinc-500: #777777;
+    --zinc-600: #555555;
+    --zinc-700: #333333;
+    --zinc-800: #222222;
+    --zinc-900: #111111;
+    --zinc-950: #000000;
+    --accent-300: #ff003c;
+    --accent-400: #ff003c;
+    --accent-500: #ff003c;
+    --accent-600: #880020;
+  }
+
+  .theme-monochrome {
+    --zinc-50: #ffffff;
+    --zinc-100: #eeeeee;
+    --zinc-200: #dddddd;
+    --zinc-300: #bbbbbb;
+    --zinc-400: #999999;
+    --zinc-500: #777777;
+    --zinc-600: #555555;
+    --zinc-700: #333333;
+    --zinc-800: #2a2a2a;
+    --zinc-900: #141414;
+    --zinc-950: #000000;
+    --accent-300: #dddddd;
+    --accent-400: #eeeeee;
+    --accent-500: #ffffff;
+    --accent-600: #bbbbbb;
+  }
+
+  /* Fix for invisible text on white background buttons in monochrome mode */
+  .theme-monochrome .bg-indigo-500,
+  .theme-monochrome .hover\:bg-indigo-600:hover,
+  .theme-monochrome .bg-emerald-500,
+  .theme-monochrome .hover\:bg-emerald-600:hover,
+  .theme-monochrome .bg-rose-500,
+  .theme-monochrome .hover\:bg-rose-600:hover {
+    color: #000000 !important;
+  }
+
+  .theme-synthwave {
+    --zinc-50: #f8f0ff;
+    --zinc-100: #f0e6ff;
+    --zinc-200: #e2d1ff;
+    --zinc-300: #d4bcff;
+    --zinc-400: #c9a3ff;
+    --zinc-500: #9a66ff;
+    --zinc-600: #6b2eff;
+    --zinc-700: #4d15d1;
+    --zinc-800: #3a156c;
+    --zinc-900: #220a42;
+    --zinc-950: #120524;
+    --accent-300: #ff7be5;
+    --accent-400: #f032e6;
+    --accent-500: #d600cc;
+    --accent-600: #990099;
   }
 }
 

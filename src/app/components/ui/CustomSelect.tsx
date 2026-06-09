@@ -7,6 +7,7 @@ export interface CustomSelectProps {
   options: { label: string; value: string }[];
   placeholder?: string;
   className?: string;
+  hideArrow?: boolean;
 }
 
 export function CustomSelect({
@@ -15,6 +16,7 @@ export function CustomSelect({
   options,
   placeholder = 'Select an option',
   className = '',
+  hideArrow = false,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -36,16 +38,20 @@ export function CustomSelect({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-zinc-950/50 border border-zinc-800 rounded-md text-zinc-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-colors"
+        className={`w-full flex items-center px-3 py-2 bg-zinc-950/50 border border-zinc-800 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-colors ${
+          hideArrow ? 'justify-center' : 'justify-between'
+        }`}
       >
         <span className={selectedOption ? 'text-zinc-200' : 'text-zinc-500'}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <ChevronDown
-          className={`w-4 h-4 text-zinc-500 transition-transform ${
-            isOpen ? 'transform rotate-180' : ''
-          }`}
-        />
+        {!hideArrow && (
+          <ChevronDown
+            className={`w-4 h-4 text-zinc-500 transition-transform ${
+              isOpen ? 'transform rotate-180' : ''
+            }`}
+          />
+        )}
       </button>
 
       {isOpen && (
