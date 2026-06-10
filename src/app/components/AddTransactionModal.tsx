@@ -6,6 +6,8 @@ import { type FinanceTransaction, useFinance } from "../data/financeStore";
 import { CustomSelect } from "./ui/CustomSelect";
 import { CustomDatePicker } from "./ui/CustomDatePicker";
 import { convertCurrency, formatCurrency } from "../utils";
+import { CategoryModal } from "../pages/Categories";
+import { AccountModal } from "../pages/Accounts";
 
 interface AddTransactionModalProps {
   isOpen: boolean;
@@ -27,6 +29,8 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
   const [notes, setNotes] = useState(initialData?.notes || "");
   const [tagText, setTagText] = useState(initialData?.tags?.join(", ") || "");
   const [attachments, setAttachments] = useState<Array<{ id: string; name: string; type: string; size: number; addedAt: string }>>(initialData?.attachments || []);
+  const [splits, setSplits] = useState<{categoryId: string, amount: number, notes?: string}[]>(initialData?.splits || []);
+  const [subModal, setSubModal] = useState<"category" | "account" | "transferAccount" | null>(null);
 
   const sourceAccount = useMemo(() => accounts.find(a => a.id === accountId), [accounts, accountId]);
   const destAccount = useMemo(() => accounts.find(a => a.id === transferAccountId), [accounts, transferAccountId]);
@@ -81,6 +85,7 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
       attachments,
       currency: type === "transfer" ? sourceAccount?.currency || "USD" : currency,
       exchangeRate: exchangeRates[currency] || 1,
+      splits: splits.length > 0 ? splits : undefined,
     };
 
     if (type === "transfer") {
@@ -113,20 +118,28 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
-    setAttachments((current) => [
-      ...current,
-      ...files.map((file) => ({
-        id: `${file.name}-${file.lastModified}`,
-        name: file.name,
-        type: file.type || "file",
-        size: file.size,
-        addedAt: new Date().toISOString(),
-      })),
-    ]);
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setAttachments((current) => [
+          ...current,
+          {
+            id: `${file.name}-${file.lastModified}`,
+            name: file.name,
+            type: file.type || "file",
+            size: file.size,
+            addedAt: new Date().toISOString(),
+            url: e.target?.result as string,
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
     event.target.value = "";
   }
 
   return createPortal(
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
         type="button"
@@ -291,19 +304,56 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
                 <label className="block text-xs font-medium text-zinc-400 mb-1.5">Category</label>
                 <CustomSelect
                   value={categoryId}
-                  onChange={setCategoryId}
-                  options={categories.map(c => ({ label: c.name, value: c.id }))}
+                  onChange={(val) => {
+                    if (val === "create_new") {
+                      setSubModal("category");
+                    } else {
+                      setCategoryId(val);
+                    }
+                  }}
+                  options={[...categories.map(c => ({ label: c.name, value: c.id })), { label: "+ Create new category", value: "create_new" }]}
                 />
               </div>
             </div>
+
+            {type !== "transfer" && splits.length > 0 && (
+              <div className="space-y-3 p-4 bg-zinc-950/50 border border-zinc-800 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-zinc-300">Splits</h4>
+                  <button type="button" onClick={() => setSplits([...splits, { categoryId: categories[0]?.id || "", amount: 0 }])} className="text-xs text-indigo-400 hover:text-indigo-300">Add Split</button>
+                </div>
+                {splits.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <CustomSelect value={s.categoryId} onChange={val => { 
+                        if (val === "create_new") setSubModal("category");
+                        else { const n = [...splits]; n[i].categoryId = val; setSplits(n); }
+                      }} options={[...categories.map(c => ({ label: c.name, value: c.id })), { label: "+ Create new category", value: "create_new" }]} />
+                    </div>
+                    <div className="w-24">
+                      <input type="number" step="any" min="0" value={s.amount || ""} onChange={e => { const n = [...splits]; n[i].amount = Number(e.target.value); setSplits(n); }} className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl py-2 px-3 text-sm text-zinc-200" placeholder="Amount" />
+                    </div>
+                    <button type="button" onClick={() => { const n = [...splits]; n.splice(i, 1); setSplits(n); }} className="p-2 text-zinc-500 hover:text-rose-400"><X className="w-4 h-4" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {type !== "transfer" && splits.length === 0 && (
+              <button type="button" onClick={() => setSplits([{ categoryId: categoryId, amount: Number(amount) || 0 }])} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                + Split transaction
+              </button>
+            )}
 
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1.5">{type === "transfer" ? "Transfer From" : "Account"}</label>
                 <CustomSelect
                   value={accountId}
-                  onChange={setAccountId}
-                  options={accounts.map(a => ({ label: a.name, value: a.id }))}
+                  onChange={(val) => {
+                    if (val === "create_new") setSubModal("account");
+                    else setAccountId(val);
+                  }}
+                  options={[...accounts.map(a => ({ label: a.name, value: a.id })), { label: "+ Create new account", value: "create_new" }]}
                 />
               </div>
 
@@ -312,8 +362,11 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
                   <label className="block text-xs font-medium text-zinc-400 mb-1.5">Transfer To</label>
                   <CustomSelect
                     value={transferAccountId}
-                    onChange={setTransferAccountId}
-                    options={accounts.filter(a => a.id !== accountId).map(a => ({ label: a.name, value: a.id }))}
+                    onChange={(val) => {
+                      if (val === "create_new") setSubModal("transferAccount");
+                      else setTransferAccountId(val);
+                    }}
+                    options={[...accounts.filter(a => a.id !== accountId).map(a => ({ label: a.name, value: a.id })), { label: "+ Create new account", value: "create_new" }]}
                   />
                 </div>
               )}
@@ -370,7 +423,11 @@ export function AddTransactionModal({ isOpen, onClose, initialData, onSave }: Ad
           </button>
         </div>
       </form>
-    </div>,
+    </div>
+    {subModal === "category" && <CategoryModal onClose={() => setSubModal(null)} />}
+    {subModal === "account" && <AccountModal mode="create" onClose={() => setSubModal(null)} />}
+    {subModal === "transferAccount" && <AccountModal mode="create" onClose={() => setSubModal(null)} />}
+    </>,
     document.body
   );
 }

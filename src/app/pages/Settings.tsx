@@ -9,9 +9,14 @@ import {
   Smartphone,
   Download,
   Upload,
+  ChevronRight,
+  LayoutDashboard,
+  Coins,
 } from "lucide-react";
 import { downloadTextFile, type AppSettings, useFinance } from "../data/financeStore";
 import { CustomSelect } from '../components/ui/CustomSelect';
+import { toast } from "sonner";
+import { VaultSetupWizard } from "../components/VaultSetupWizard";
 
 const THEMES = [
   { id: "theme-light", name: "Light", bg: "#ffffff", accent: "#6366f1" },
@@ -35,13 +40,20 @@ const tabs = [
 ] as const;
 
 export function Settings() {
-  const { settings, updateSettings, exportBackup, restoreBackup, state, resetDemoData, workspaces, activeWorkspaceId, createWorkspace, switchWorkspace, renameWorkspace, deleteWorkspace } = useFinance();
+  const { settings, updateSettings, exportBackup, restoreBackup, state, resetDemoData, workspaces, activeWorkspaceId, createWorkspace, switchWorkspace, renameWorkspace, deleteWorkspace, updateCustomExchangeRates } = useFinance();
   const restoreInputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]["id"]>("profile");
+  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]["id"]>(
+    (sessionStorage.getItem("settingsTab") as any) || "profile"
+  );
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [message, setMessage] = useState("");
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [newCurrency, setNewCurrency] = useState("");
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+
+  useEffect(() => {
+    sessionStorage.setItem("settingsTab", activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     setDraft(settings);
@@ -252,32 +264,45 @@ export function Settings() {
           {activeTab === "workspaces" && (
             <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-zinc-100">Workspaces</h2>
-                <p className="text-sm text-zinc-500 mt-1">Manage isolated databases. Switching workspaces creates a completely new, clean environment.</p>
+                <h2 className="text-lg font-semibold text-zinc-100">Vaults</h2>
+                <p className="text-sm text-zinc-500 mt-1">Manage isolated databases. Creating a new vault starts a completely clean financial environment.</p>
               </div>
               
-              <div className="flex items-center gap-3 bg-zinc-950/50 p-3 rounded-xl border border-zinc-800">
+              <div className="flex flex-col sm:flex-row items-center gap-3 bg-zinc-950/50 p-3 rounded-xl border border-zinc-800">
                 <input 
                   type="text" 
                   value={newWorkspaceName} 
                   onChange={e => setNewWorkspaceName(e.target.value)} 
-                  placeholder="New workspace name..." 
-                  className="flex-1 bg-transparent border-none focus:outline-none text-sm text-zinc-200 px-2"
+                  placeholder="New vault name..." 
+                  className="flex-1 w-full bg-transparent border-none focus:outline-none text-sm text-zinc-200 px-2"
                 />
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    if (newWorkspaceName.trim()) {
-                      createWorkspace(newWorkspaceName.trim());
-                      setNewWorkspaceName("");
-                    }
-                  }} 
-                  disabled={!newWorkspaceName.trim()}
-                  className="px-4 py-1.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Create
-                </button>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      if (newWorkspaceName.trim()) {
+                        setShowSetupWizard(true);
+                      }
+                    }} 
+                    disabled={!newWorkspaceName.trim()}
+                    className="flex-1 sm:flex-none px-6 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap flex items-center justify-center gap-2"
+                  >
+                    Next <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
+
+              {showSetupWizard && (
+                <VaultSetupWizard
+                  vaultName={newWorkspaceName.trim()}
+                  onClose={() => setShowSetupWizard(false)}
+                  onConfirm={(templateId, withDemoData) => {
+                    createWorkspace(newWorkspaceName.trim(), templateId, withDemoData);
+                    setShowSetupWizard(false);
+                    setNewWorkspaceName("");
+                  }}
+                />
+              )}
 
               <div className="space-y-3 mt-4">
                 {workspaces.map(ws => (
@@ -369,10 +394,10 @@ export function Settings() {
               
               <div className="space-y-4">
                 {[
-                  { title: "Budget Alerts", desc: "Get notified when you exceed 80% of a budget limit." },
-                  { title: "Weekly Report", desc: "Receive a summary of your weekly cash flow." },
-                  { title: "Bill Reminders", desc: "Alerts for upcoming subscription payments." },
-                  { title: "Unusual Activity", desc: "Warnings for abnormally large transactions." }
+                  { title: "Budget Alerts", desc: "Get notified when you exceed 80% of a budget limit.", key: "budgetAlerts" },
+                  { title: "Weekly Report", desc: "Receive a summary of your weekly cash flow.", key: "weeklyReport" },
+                  { title: "Bill Reminders", desc: "Alerts for upcoming subscription payments.", key: "billReminders" },
+                  { title: "Unusual Activity", desc: "Warnings for abnormally large transactions.", key: "unusualActivity" }
                 ].map((item, i) => (
                   <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-zinc-800/60 bg-zinc-800/20">
                     <div>
@@ -380,7 +405,12 @@ export function Settings() {
                       <p className="text-xs text-zinc-500">{item.desc}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" className="sr-only peer" defaultChecked={i % 2 === 0} />
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer" 
+                        checked={settings[item.key as keyof AppSettings] as boolean ?? false} 
+                        onChange={(e) => updateSettings({ [item.key]: e.target.checked })} 
+                      />
                       <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
                     </label>
                   </div>

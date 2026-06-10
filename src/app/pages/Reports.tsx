@@ -35,15 +35,19 @@ export function Reports() {
   const [range, setRange] = useState("All Time");
   const [typeFilter, setTypeFilter] = useState("all");
 
-  const filteredReports = useMemo(() => reports.filter((report) => typeFilter === "all" || report.type === typeFilter), [reports, typeFilter]);
+  const filteredReports = useMemo(() => reports.filter((report) => {
+    if (typeFilter !== "all" && report.type !== typeFilter) return false;
+    if (range === "This Year") return report.date.includes(new Date().getFullYear().toString());
+    return true;
+  }), [reports, typeFilter, range]);
 
   function downloadReport(report: SavedReport) {
     const lines = [
       `Generated: ${report.date}`,
-      `Income: ${formatCurrency(totals.monthlyIncome)}`,
-      `Expenses: ${formatCurrency(totals.monthlyExpenses)}`,
-      `Net profit: ${formatCurrency(totals.netProfit)}`,
-      `Transactions: ${transactions.length}`,
+      `Income: ${formatCurrency(report.snapshotTotals?.monthlyIncome ?? totals.monthlyIncome)}`,
+      `Expenses: ${formatCurrency(report.snapshotTotals?.monthlyExpenses ?? totals.monthlyExpenses)}`,
+      `Net profit: ${formatCurrency(report.snapshotTotals?.netProfit ?? totals.netProfit)}`,
+      `Transactions: ${report.snapshotTxnCount ?? transactions.length}`,
     ];
 
     if (report.type === "CSV") {

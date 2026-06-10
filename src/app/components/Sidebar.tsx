@@ -12,6 +12,9 @@ import {
   X,
   Landmark,
   RefreshCw,
+  LineChart,
+  CalendarDays,
+  TrendingUp,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useFinance } from "../data/financeStore";
@@ -27,6 +30,8 @@ const navItems = [
   { name: "Goals", path: "/goals", icon: Target },
   { name: "Loans", path: "/loans", icon: Landmark },
   { name: "Subscriptions", path: "/subscriptions", icon: RefreshCw },
+  { name: "Forecast", path: "/forecast", icon: LineChart },
+  { name: "Calendar", path: "/calendar", icon: CalendarDays },
 ];
 
 interface SidebarProps {
@@ -97,7 +102,7 @@ function SidebarContent({ onNavigate, showClose }: { onNavigate?: () => void; sh
         <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg">
           <Wallet className="w-4 h-4 text-white" />
         </div>
-        <span className="flex-1">FlowLedger</span>
+        <span className="flex-1 font-bold text-lg text-indigo-400">WhereDidItGo</span>
         {showClose && (
           <button
             type="button"
@@ -162,7 +167,9 @@ function SidebarContent({ onNavigate, showClose }: { onNavigate?: () => void; sh
             className="w-10 h-10 rounded-full object-cover border border-zinc-700"
           />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-zinc-200 truncate">{settings.name || "User"}</p>
+            <p className="text-sm font-medium text-zinc-200 truncate">
+              {settings.firstName || settings.lastName ? `${settings.firstName} ${settings.lastName}`.trim() : "User"}
+            </p>
             <p className="text-xs text-zinc-500 line-clamp-2 leading-tight" title={quote}>{quote}</p>
           </div>
           

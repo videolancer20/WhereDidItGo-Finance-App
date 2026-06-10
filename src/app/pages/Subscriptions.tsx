@@ -8,21 +8,73 @@ import { CustomDatePicker } from '../components/ui/CustomDatePicker';
 import { ColorSelect } from '../components/ui/ColorSelect';
 
 export function Subscriptions() {
-  const { subscriptions, accounts, categories, addSubscription, updateSubscription, deleteSubscription, pauseSubscription, resumeSubscription, paySubscription, skipSubscription, rewindSubscription } = useFinance();
+  const { subscriptions, accounts, categories, addSubscription, updateSubscription, deleteSubscription, pauseSubscription, resumeSubscription, paySubscription, skipSubscription, rewindSubscription, exchangeRates, settings } = useFinance();
   const [isModalOpen, setModalOpen] = useState(false);
   const [editingSub, setEditingSub] = useState<Subscription | null>(null);
 
   const activeSubscriptions = useMemo(() => subscriptions.filter(s => s.status === "active"), [subscriptions]);
   const pausedSubscriptions = useMemo(() => subscriptions.filter(s => s.status === "paused"), [subscriptions]);
 
-  const monthlyTotal = useMemo(() => {
-    return activeSubscriptions.reduce((acc, sub) => {
+  const globalCurrency = settings?.currency || "USD";
+
+  const { monthlyTotal, multiMonthlyTotal } = useMemo(() => {
+    let monthlyTotal = 0;
+    const multiMonthlyTotal: Record<string, number> = {};
+
+    activeSubscriptions.forEach((sub) => {
       let monthly = sub.amount;
       if (sub.frequency === "weekly") monthly *= 4.33;
       if (sub.frequency === "yearly") monthly /= 12;
-      return acc + monthly;
-    }, 0);
-  }, [activeSubscriptions]);
+
+      const subCur = sub.currency || "USD";
+      const rateToUse = exchangeRates[subCur] || 1;
+      const amountInUSD = monthly / rateToUse;
+      const targetRate = globalCurrency === "MULTI" ? 1 : (exchangeRates[globalCurrency] || 1);
+      
+      monthlyTotal += amountInUSD * targetRate;
+
+      const targetCur = globalCurrency === "MULTI" ? subCur : globalCurrency;
+      multiMonthlyTotal[targetCur] = (multiMonthlyTotal[targetCur] || 0) + (globalCurrency === "MULTI" ? monthly : amountInUSD * targetRate);
+    });
+
+    return { monthlyTotal, multiMonthlyTotal };
+  }, [activeSubscriptions, exchangeRates, globalCurrency]);
+
+  const annualProjection = monthlyTotal * 12;
+  const dailyCost = monthlyTotal / 30.44;
+
+  const categoryConcentration = useMemo(() => {
+    const byCat: Record<string, number> = {};
+    activeSubscriptions.forEach(sub => {
+      const catId = sub.categoryId || 'uncategorized';
+      let monthly = sub.amount;
+      if (sub.frequency === 'weekly') monthly *= 4.33;
+      else if (sub.frequency === 'yearly') monthly /= 12;
+      byCat[catId] = (byCat[catId] || 0) + monthly;
+    });
+
+    const entries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+    if (entries.length === 0 || monthlyTotal === 0) return { topCategory: '', percentage: 0 };
+
+    const topCatId = entries[0][0];
+    const topCat = categories.find(c => c.id === topCatId);
+    return { topCategory: topCat?.name || topCatId, percentage: (entries[0][1] / monthlyTotal) * 100 };
+  }, [activeSubscriptions, monthlyTotal, categories]);
+
+  const renderKPIValue = (singleValue: number, multiValues: Record<string, number>, colorClass: string = "text-zinc-100") => {
+    if (globalCurrency === "MULTI") {
+      const entries = Object.entries(multiValues);
+      if (entries.length === 0) return <p className={`text-3xl font-semibold ${colorClass}`}>{formatCurrency(0, "USD")}</p>;
+      return (
+        <div className="space-y-1">
+          {entries.map(([cur, val]) => (
+            <p key={cur} className={`text-2xl font-bold ${colorClass}`}>{formatCurrency(val, cur)}</p>
+          ))}
+        </div>
+      );
+    }
+    return <p className={`text-3xl font-semibold ${colorClass}`}>{formatCurrency(singleValue, globalCurrency)}</p>;
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -37,14 +89,29 @@ export function Subscriptions() {
         </button>
       </div>
 
-      <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-zinc-400 mb-1">Estimated Monthly Cost</p>
-          <p className="text-3xl font-semibold text-rose-400">{formatCurrency(monthlyTotal)}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
+          <p className="text-sm font-medium text-zinc-400 mb-1">Monthly Cost</p>
+          {renderKPIValue(monthlyTotal, multiMonthlyTotal, "text-rose-400")}
         </div>
-        <div className="text-right">
-          <p className="text-sm font-medium text-zinc-400 mb-1">Active Subscriptions</p>
-          <p className="text-3xl font-semibold text-zinc-100">{activeSubscriptions.length}</p>
+        <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
+          <p className="text-sm font-medium text-zinc-400 mb-1">Annual Cost</p>
+          <p className="text-3xl font-semibold text-violet-400">{formatCurrency(annualProjection, globalCurrency === "MULTI" ? "USD" : globalCurrency)}</p>
+        </div>
+        <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
+          <p className="text-sm font-medium text-zinc-400 mb-1">Cost Per Day</p>
+          <p className="text-3xl font-semibold text-amber-400">{formatCurrency(dailyCost, globalCurrency === "MULTI" ? "USD" : globalCurrency)}</p>
+        </div>
+        <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
+          <p className="text-sm font-medium text-zinc-400 mb-1">Top Category</p>
+          {categoryConcentration.topCategory ? (
+            <>
+              <p className="text-2xl font-semibold text-zinc-100 truncate">{categoryConcentration.topCategory}</p>
+              <p className="text-xs text-zinc-500 mt-1">{categoryConcentration.percentage.toFixed(0)}% concentration</p>
+            </>
+          ) : (
+            <p className="text-2xl font-semibold text-zinc-500">—</p>
+          )}
         </div>
       </div>
 

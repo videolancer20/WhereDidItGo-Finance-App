@@ -35,7 +35,7 @@ const iconMap = {
   Tags,
 };
 
-function CategoryModal({ category, onClose }: { category?: CategoryRecord; onClose: () => void }) {
+export function CategoryModal({ category, onClose }: { category?: CategoryRecord; onClose: () => void }) {
   const { categories, addCategory, updateCategory, archiveCategory, mergeCategories } = useFinance();
   const [name, setName] = useState(category?.name ?? "");
   const [type, setType] = useState<CategoryRecord["type"]>(category?.type ?? "expense");
@@ -147,7 +147,7 @@ export function Categories() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {categories.map((cat) => {
+        {categories.filter(c => !c.archived).map((cat) => {
           const Icon = iconMap[cat.icon as keyof typeof iconMap] ?? Tags;
           const categoryStats = stats[cat.id] ?? { income: 0, expense: 0, profit: 0 };
 

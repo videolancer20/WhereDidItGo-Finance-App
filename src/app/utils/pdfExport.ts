@@ -1,11 +1,11 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { type TransactionRecord, type BudgetRecord } from "../data/financeStore";
+import { type FinanceTransaction, type BudgetRecord } from "../data/financeStore";
 import { formatCurrency } from "../utils";
 
 interface ExportData {
   title: string;
-  transactions: TransactionRecord[];
+  transactions: FinanceTransaction[];
   budgets?: BudgetRecord[];
   totals?: {
     monthlyIncome: number;
@@ -21,7 +21,7 @@ function createBasePdf(title: string, dateRange?: string) {
   // Header
   doc.setFontSize(22);
   doc.setTextColor(40, 40, 40);
-  doc.text("FlowLedger", 14, 22);
+  doc.text("WhereDidItGo", 14, 22);
   
   doc.setFontSize(14);
   doc.setTextColor(100, 100, 100);

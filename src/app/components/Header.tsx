@@ -15,10 +15,16 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [period, setPeriod] = useState("This Month");
   const [showNotifications, setShowNotifications] = useState(false);
   const results = search(query);
-  const periods = ["Today", "This Week", "Last 15 Days", "This Month", "This Quarter", "This Year", "All Time"];
+  
+  const notifications = [
+    ...(settings.budgetAlerts ? ["Budget monitoring is active. You will be alerted when approaching limits."] : []),
+    ...(settings.weeklyReport ? ["Your next weekly report will be generated on Sunday."] : []),
+    ...(settings.billReminders ? ["Bill reminders are active. Check upcoming payments."] : []),
+    ...(settings.unusualActivity ? ["Unusual activity monitoring is running."] : []),
+    "System backup is configured to " + (settings.backupSchedule || "Off")
+  ];
 
   return (
     <header className="h-16 sm:h-20 border-b border-zinc-800/80 bg-zinc-950/30 backdrop-blur-md px-4 sm:px-6 lg:px-8 flex items-center justify-between sticky top-0 z-20">
@@ -74,13 +80,8 @@ export function Header({ onMenuClick }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
-        <div className="hidden sm:block w-32">
-          <CustomSelect
-            value={period}
-            onChange={(val) => setPeriod(val)}
-            options={periods.map(p => ({ label: p, value: p }))}
-            hideArrow
-          />
+        <div className="hidden sm:block">
+          {/* Unused Period Filter Removed */}
         </div>
 
         <div className="relative">
@@ -91,10 +92,8 @@ export function Header({ onMenuClick }: HeaderProps) {
             className="w-10 h-10 rounded-lg border border-zinc-800 hover:bg-zinc-800/50 flex items-center justify-center text-zinc-400 transition-colors relative"
           >
             <Bell className="w-4 h-4" />
-            {smartAlerts.length > 0 ? (
-              <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-rose-500 rounded-full"></span>
-            ) : (
-              <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+            {(smartAlerts.length > 0 || notifications.length > 0) && (
+              <span className={`absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full ${smartAlerts.length > 0 ? "bg-rose-500" : "bg-indigo-500"}`}></span>
             )}
           </button>
           {showNotifications && (
@@ -128,12 +127,16 @@ export function Header({ onMenuClick }: HeaderProps) {
               <div className="overflow-y-auto custom-scrollbar flex-1">
                 {activeTab === "notifications" ? (
                   <>
-                    {["Marketing budget is over limit", "AWS recurring payment due soon", "Backup schedule is active"].map((item) => (
-                      <div key={item} className="px-4 py-3 border-b border-zinc-800/50 last:border-b-0">
-                        <p className="text-sm text-zinc-300">{item}</p>
-                        <p className="text-xs text-zinc-500 mt-1">v0 local alert</p>
-                      </div>
-                    ))}
+                    {notifications.length === 0 ? (
+                      <div className="p-6 text-center text-sm text-zinc-500">No notifications</div>
+                    ) : (
+                      notifications.map((item, idx) => (
+                        <div key={idx} className="px-4 py-3 border-b border-zinc-800/50 last:border-b-0">
+                          <p className="text-sm text-zinc-300">{item}</p>
+                          <p className="text-xs text-zinc-500 mt-1">System status</p>
+                        </div>
+                      ))
+                    )}
                   </>
                 ) : (
                   <>

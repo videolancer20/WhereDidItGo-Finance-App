@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { Layout } from "./Layout";
-import { Dashboard } from "./pages/Dashboard";
+import { ErrorPage } from "./pages/ErrorPage";
+import { DashboardModern } from "./pages/DashboardModern";
 import { Transactions } from "./pages/Transactions";
 import { Categories } from "./pages/Categories";
 import { Accounts } from "./pages/Accounts";
@@ -12,13 +13,16 @@ import { Goals } from "./pages/Goals";
 import { Settings } from "./pages/Settings";
 import { Loans } from "./pages/Loans";
 import { Subscriptions } from "./pages/Subscriptions";
+import { Forecast } from "./pages/Forecast";
+import { Calendar } from "./pages/Calendar";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     Component: Layout,
+    errorElement: <ErrorPage />,
     children: [
-      { index: true, Component: Dashboard },
+      { index: true, Component: DashboardModern },
       { path: "transactions", Component: Transactions },
       { path: "categories", Component: Categories },
       { path: "categories/:id", Component: CategoryDetail },
@@ -30,6 +34,8 @@ export const router = createBrowserRouter([
       { path: "settings", Component: Settings },
       { path: "loans", Component: Loans },
       { path: "subscriptions", Component: Subscriptions },
+      { path: "forecast", Component: Forecast },
+      { path: "calendar", Component: Calendar },
     ],
   },
 ]);

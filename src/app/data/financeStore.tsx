@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useContext, useEffect, useMemo, useState
 import { toast } from "sonner";
 import { AlertCircle, Zap } from "lucide-react";
 import { formatCurrency } from "../utils";
+import { vaultTemplates } from "./vaultTemplates";
 
 export type TransactionType = "income" | "expense" | "transfer";
 
@@ -11,6 +12,7 @@ export interface FinanceAttachment {
   type: string;
   size: number;
   addedAt: string;
+  url?: string;
 }
 
 export interface FinanceTransaction {
@@ -32,6 +34,10 @@ export interface FinanceTransaction {
   destinationAmount?: number;
   destinationCurrency?: string;
   feeAmount?: number;
+  currency?: string;
+  exchangeRate?: number;
+  splits?: { categoryId: string, amount: number, notes?: string }[];
+  reconciled?: boolean;
 }
 
 export interface CategoryRecord {
@@ -73,12 +79,21 @@ export interface GoalRecord {
   name: string;
   target: number;
   current: number;
-  type: "savings" | "revenue" | "expense-reduction";
+  type: "savings" | "debt-payoff" | "expense-reduction";
   icon: string;
   color: string;
   due: string;
   achieved?: boolean;
   currency: string;
+}
+
+export interface GoalContribution {
+  id: string;
+  goalId: string;
+  amount: number;
+  date: string;
+  accountId?: string;
+  notes?: string;
 }
 
 export interface RecurringPayment {
@@ -98,6 +113,8 @@ export interface SavedReport {
   date: string;
   type: "CSV" | "PDF" | "Excel";
   size: string;
+  snapshotTotals?: { monthlyIncome: number; monthlyExpenses: number; netProfit: number };
+  snapshotTxnCount?: number;
 }
 
 export interface AppSettings {
@@ -111,6 +128,19 @@ export interface AppSettings {
   customCurrencies?: string[];
   avatarUrl?: string;
   dismissedAlerts?: string[];
+  budgetAlerts?: boolean;
+  weeklyReport?: boolean;
+  unusualActivity?: boolean;
+  billReminders?: boolean;
+  dashboardConfig?: {
+    hideWallet?: boolean;
+    hideTopCategories?: boolean;
+    hideUpcomingSubs?: boolean;
+    hideSavingsRate?: boolean;
+    hideGoals?: boolean;
+    hideWarnings?: boolean;
+    hideRecentTransactions?: boolean;
+  };
 }
 
 export interface LoanEntity {
@@ -163,6 +193,28 @@ export interface SubscriptionOverride {
   skipped: boolean;
 }
 
+export interface InvestmentAsset {
+  id: string;
+  symbol: string;
+  name: string;
+  type: "stock" | "crypto" | "real_estate" | "other";
+  shares: number;
+  averagePrice: number;
+  currentPrice: number;
+  currency: string;
+}
+
+export interface InvestmentTransaction {
+  id: string;
+  assetId: string;
+  type: "buy" | "sell";
+  date: string;
+  shares: number;
+  price: number;
+  fees: number;
+  accountId?: string;
+}
+
 export interface FinanceState {
   version: number;
   transactions: FinanceTransaction[];
@@ -179,6 +231,10 @@ export interface FinanceState {
   subscriptions: Subscription[];
   subscriptionOverrides: SubscriptionOverride[];
   exchangeRates: Record<string, number>;
+  customExchangeRates?: Record<string, number>;
+  investments: InvestmentAsset[];
+  investmentTransactions: InvestmentTransaction[];
+  goalContributions?: GoalContribution[];
 }
 
 export interface NewTransactionInput {
@@ -331,10 +387,55 @@ export const initialFinanceState: FinanceState = {
     backupSchedule: "Off",
     customCurrencies: ["USD", "EUR", "GBP", "BDT", "ETH"],
     avatarUrl: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=150&auto=format&fit=crop",
+    budgetAlerts: true,
+    weeklyReport: true,
+    unusualActivity: true,
   },
   loanEntities: initialLoanEntities,
   loanTransactions: initialLoanTransactions,
   subscriptions: initialSubscriptions,
+  subscriptionOverrides: [],
+};
+
+const emptyCategories: CategoryRecord[] = [
+  { id: "personal-expenses", name: "Personal Expenses", type: "expense", icon: "User", color: "bg-blue-500/20 text-blue-400", archived: false },
+  { id: "business-expenses", name: "Business Expenses", type: "expense", icon: "Receipt", color: "bg-orange-500/20 text-orange-400", archived: false },
+  { id: "taxes", name: "Taxes", type: "expense", icon: "Landmark", color: "bg-rose-500/20 text-rose-400", archived: false },
+  { id: "savings", name: "Savings", type: "expense", icon: "PiggyBank", color: "bg-teal-500/20 text-teal-400", archived: false },
+  { id: "groceries", name: "Groceries", type: "expense", icon: "ShoppingCart", color: "bg-sky-500/20 text-sky-400", archived: false },
+  { id: "travel", name: "Travel", type: "expense", icon: "Plane", color: "bg-pink-500/20 text-pink-400", archived: false },
+  { id: "dining-out", name: "Dining Out", type: "expense", icon: "Receipt", color: "bg-pink-500/20 text-pink-400", archived: false },
+  { id: "income", name: "Income", type: "income", icon: "Zap", color: "bg-emerald-500/20 text-emerald-400", archived: false },
+  { id: "transfer", name: "Transfer", type: "both", icon: "ArrowLeftRight", color: "bg-cyan-500/20 text-cyan-400", archived: false }
+];
+
+export const emptyFinanceState: FinanceState = {
+  version: appStateVersion,
+  exchangeRates: { USD: 1 },
+  transactions: [],
+  categories: emptyCategories,
+  accounts: [],
+  budgets: [],
+  goals: [],
+  recurringPayments: [],
+  reports: [],
+  settings: {
+    firstName: "New",
+    lastName: "User",
+    email: "",
+    currency: "USD",
+    dateFormat: "MMM d, yyyy",
+    theme: "theme-dark",
+    backupSchedule: "Off",
+    customCurrencies: ["USD", "EUR", "GBP", "BDT", "ETH"],
+    avatarUrl: "",
+    budgetAlerts: true,
+    weeklyReport: true,
+    unusualActivity: true,
+  },
+  loanEntities: [],
+  loanTransactions: [],
+  subscriptions: [],
   subscriptionOverrides: [],
 };
 
@@ -358,6 +459,8 @@ interface FinanceContextValue {
     cashFlow: number;
   };
   exchangeRates: Record<string, number>;
+  customExchangeRates?: Record<string, number>;
+  updateCustomExchangeRates: (rates: Record<string, number>) => void;
   fetchLiveRates: () => Promise<void>;
   addTransaction: (transaction: NewTransactionInput) => string;
   updateTransaction: (id: string, changes: Partial<NewTransactionInput & Pick<FinanceTransaction, "status">>) => void;
@@ -366,7 +469,7 @@ interface FinanceContextValue {
   bulkDeleteTransactions: (ids: string[]) => void;
   bulkUpdateTransactions: (ids: string[], changes: Partial<Pick<FinanceTransaction, "categoryId" | "accountId" | "tags">>) => void;
   addTransfer: (fromAccountId: string, toAccountId: string, amount: number, date: string, notes?: string) => void;
-  addCategory: (name: string, type: CategoryRecord["type"]) => void;
+  addCategory: (name: string, type: CategoryRecord["type"], color?: string) => void;
   updateCategory: (id: string, changes: Partial<CategoryRecord>) => void;
   archiveCategory: (id: string) => void;
   mergeCategories: (sourceId: string, targetId: string) => void;
@@ -375,8 +478,14 @@ interface FinanceContextValue {
   archiveAccount: (id: string) => void;
   addBudget: (categoryId: string, limit: number, color: string, currency: string, targetType?: "category" | "account") => void;
   updateBudget: (id: string, changes: Partial<BudgetRecord>) => void;
+  deleteBudget: (id: string) => void;
   addGoal: (goal: Omit<GoalRecord, "id">) => void;
   updateGoal: (id: string, changes: Partial<GoalRecord>) => void;
+  deleteGoal: (id: string) => void;
+  addGoalContribution: (goalId: string, amount: number, date: string, accountId?: string, notes?: string) => void;
+  updateGoalContribution: (id: string, changes: Partial<GoalContribution>) => void;
+  deleteGoalContribution: (id: string) => void;
+  goalContributions: GoalContribution[];
   updateSettings: (settings: Partial<AppSettings>) => void;
   generateReport: (kind: "Monthly" | "Quarterly" | "Annual" | "Cash Flow" | "Profit & Loss" | "Category") => SavedReport;
   exportBackup: () => string;
@@ -388,10 +497,11 @@ interface FinanceContextValue {
   subscriptions: Subscription[];
   subscriptionOverrides: SubscriptionOverride[];
   upcomingPayments: Array<{ id: string; name: string; amount: number; nextDate: string; categoryId: string; accountId: string; accountName: string; frequency: string; }>;
-  addLoanEntity: (name: string, category: "bank" | "individual", notes: string, currency?: string) => string;
+  addLoanEntity: (name: string, category: "bank" | "individual", notes: string, color?: string, currency?: string) => string;
   updateLoanEntity: (id: string, changes: Partial<LoanEntity>) => void;
   deleteLoanEntity: (id: string) => void;
   addLoanTransaction: (entityId: string, amount: number, type: "lent" | "borrowed", date: string, notes: string, settled?: boolean, parentId?: string, accountId?: string, currency?: string) => void;
+  updateLoanTransaction: (id: string, changes: Partial<LoanTransaction>) => void;
   deleteLoanTransaction: (id: string) => void;
   toggleLoanSettled: (id: string) => void;
   addSubscription: (sub: Omit<Subscription, "id" | "nextDueDate">) => string;
@@ -408,7 +518,7 @@ interface FinanceContextValue {
   // Workspaces
   workspaces: Workspace[];
   activeWorkspaceId: string;
-  createWorkspace: (name: string) => void;
+  createWorkspace: (name: string, templateId: string, withDemoData?: boolean) => Promise<void>;
   switchWorkspace: (id: string) => void;
   renameWorkspace: (id: string, name: string) => void;
   deleteWorkspace: (id: string) => void;
@@ -419,6 +529,19 @@ interface FinanceContextValue {
   // Alerts
   smartAlerts: Array<{ id: string; type: string; icon: any; message: string }>;
   dismissAlert: (id: string) => void;
+
+  // Investments
+  investments: InvestmentAsset[];
+  investmentTransactions: InvestmentTransaction[];
+  addInvestmentAsset: (asset: Omit<InvestmentAsset, "id">) => string;
+  updateInvestmentAsset: (id: string, changes: Partial<InvestmentAsset>) => void;
+  deleteInvestmentAsset: (id: string) => void;
+  addInvestmentTransaction: (txn: Omit<InvestmentTransaction, "id">, accountId?: string) => void;
+  deleteInvestmentTransaction: (id: string) => void;
+  updateInvestmentPrice: (id: string, newPrice: number) => void;
+  
+  // Reconciliation
+  toggleReconciled: (id: string) => void;
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null);
@@ -747,6 +870,62 @@ function checkAndAutoPaySubscriptions(state: FinanceState): FinanceState {
   return state;
 }
 
+async function getGlobalProfile(): Promise<Partial<AppSettings> | null> {
+  if (typeof indexedDB === "undefined") return null;
+  try {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open("flowledger-global", 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains("profile")) {
+          req.result.createObjectStore("profile");
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction("profile", "readonly");
+      const req = tx.objectStore("profile").get("current");
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) {
+    console.error("Failed to read global profile from IndexedDB", e);
+    return null;
+  }
+}
+
+async function saveGlobalProfile(profile: Partial<AppSettings>) {
+  if (typeof indexedDB === "undefined") return;
+  try {
+    const existing = await getGlobalProfile() || {};
+    const merged = {
+      firstName: profile.firstName ?? existing.firstName,
+      lastName: profile.lastName ?? existing.lastName,
+      email: profile.email ?? existing.email,
+      avatarUrl: profile.avatarUrl ?? existing.avatarUrl
+    };
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open("flowledger-global", 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains("profile")) {
+          req.result.createObjectStore("profile");
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("profile", "readwrite");
+      tx.objectStore("profile").put(merged, "current");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch(e) {
+    console.error("Failed to save global profile", e);
+  }
+}
+
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<FinanceState>(initialFinanceState);
   const [isReady, setIsReady] = useState(false);
@@ -786,16 +965,22 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         const migratedState = migrateIndexedState(stored);
         migratedState.exchangeRates = rates;
         
+        const globalProfile = await getGlobalProfile();
+        if (globalProfile) {
+          migratedState.settings = { ...migratedState.settings, ...globalProfile };
+        } else {
+          await saveGlobalProfile(migratedState.settings);
+        }
+        
         if (isMounted) setState(migratedState);
-      })
-      .finally(() => {
-        if (isMounted) setIsReady(true);
       })
       .catch((err) => {
         console.error("Failed to read indexed state", err);
         if (!isMounted) return;
         setState(initialFinanceState);
-        setIsReady(true);
+      })
+      .finally(() => {
+        if (isMounted) setIsReady(true);
       });
 
     return () => {
@@ -806,10 +991,22 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isReady) return;
     const theme = state.settings.theme;
-    if (theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+    
+    // Remove all previous theme classes
+    document.documentElement.classList.remove(
+      "theme-light", "theme-dark", "theme-midnight", 
+      "theme-forest", "theme-sunset", "theme-dracula", "theme-nord", 
+      "theme-cyberpunk", "theme-monochrome", "theme-synthwave", "dark"
+    );
+
+    // Apply the current theme class
+    document.documentElement.classList.add(theme);
+
+    // Also apply 'dark' if it's a dark-based theme
+    if (theme.includes("dark") || theme === "theme-midnight" || theme === "theme-forest" || theme === "theme-sunset" || theme === "theme-dracula" || theme === "theme-nord" || theme === "theme-cyberpunk" || theme === "theme-synthwave") {
       document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
+    } else if (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      document.documentElement.classList.add("dark");
     }
   }, [state.settings.theme, isReady]);
 
@@ -823,30 +1020,42 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [isReady]);
 
   const fetchLiveRates = async () => {
-    let newRates = { ...state.exchangeRates };
     try {
       const res = await fetch("https://open.er-api.com/v6/latest/USD");
       const data = await res.json();
-      if (data && data.rates) newRates = { ...newRates, ...data.rates };
+      
+      let ethRate: number | undefined;
+      try {
+        const ethRes = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT");
+        const ethData = await ethRes.json();
+        if (ethData && ethData.price) {
+          ethRate = 1 / Number(ethData.price);
+        }
+      } catch (e) {
+        console.error("Failed to fetch ETH rate", e);
+      }
+
+      setState(s => {
+        let newRates = { ...s.exchangeRates };
+        if (data && data.rates) newRates = { ...newRates, ...data.rates };
+        if (ethRate !== undefined) newRates["ETH"] = ethRate;
+        
+        const updated = { ...s, exchangeRates: newRates };
+        // Fire and forget writing to IndexedDB to persist
+        void writeIndexedState(updated);
+        return updated;
+      });
     } catch (e) {
       console.error("Failed to fetch rates", e);
     }
-
-    try {
-      const ethRes = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT");
-      const ethData = await ethRes.json();
-      if (ethData && ethData.price) {
-        newRates["ETH"] = 1 / Number(ethData.price);
-      }
-    } catch (e) {
-      console.error("Failed to fetch ETH rate", e);
-    }
-    setState(s => {
-      const updated = { ...s, exchangeRates: newRates };
-      writeIndexedState(updated);
-      return updated;
-    });
   };
+
+  useEffect(() => {
+    if (!isReady) return;
+    fetchLiveRates();
+    const interval = setInterval(fetchLiveRates, 60 * 60 * 1000); // refresh every hour
+    return () => clearInterval(interval);
+  }, [isReady]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -910,22 +1119,29 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [state.accounts, state.transactions, state.exchangeRates]);
 
   const totals = useMemo(() => {
-    const nonTransfers = state.transactions.filter((transaction) => transaction.type !== "transfer");
+    const userCurrency = state.settings.currency || "USD";
+    const userRate = state.exchangeRates[userCurrency] || 1;
+
+    const now = new Date();
+    const currentMonthPrefix = now.toISOString().slice(0, 7);
     
-    const monthlyIncome = nonTransfers
+    const nonTransfers = state.transactions.filter((transaction) => transaction.type !== "transfer");
+    const currentMonthNonTransfers = nonTransfers.filter((t) => t.date.startsWith(currentMonthPrefix));
+    
+    const monthlyIncome = currentMonthNonTransfers
       .filter((transaction) => transaction.type === "income")
       .reduce((sum, transaction) => {
          const txCurrency = transaction.currency || "USD";
          const rate = state.exchangeRates[txCurrency] || 1;
-         return sum + (Math.abs(transaction.amount) / rate);
+         return sum + ((Math.abs(transaction.amount) / rate) * userRate);
       }, 0);
       
-    const monthlyExpenses = nonTransfers
+    const monthlyExpenses = currentMonthNonTransfers
       .filter((transaction) => transaction.type === "expense")
       .reduce((sum, transaction) => {
          const txCurrency = transaction.currency || "USD";
          const rate = state.exchangeRates[txCurrency] || 1;
-         return sum + (Math.abs(transaction.amount) / rate);
+         return sum + ((Math.abs(transaction.amount) / rate) * userRate);
       }, 0);
       
     const totalBalance = activeAccounts
@@ -933,17 +1149,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       .reduce((sum, account) => {
          const bal = accountBalances[account.id] ?? 0;
          const rate = state.exchangeRates[account.currency || "USD"] || 1;
-         return sum + (bal / rate);
+         return sum + ((bal / rate) * userRate);
       }, 0);
 
     return {
       totalBalance,
-      monthlyIncome: 28129.55 + monthlyIncome,
-      monthlyExpenses: 14975.2 + monthlyExpenses,
-      netProfit: 28129.55 + monthlyIncome - (14975.2 + monthlyExpenses),
-      cashFlow: 4504.35 + monthlyIncome - monthlyExpenses,
+      monthlyIncome,
+      monthlyExpenses,
+      netProfit: monthlyIncome - monthlyExpenses,
+      cashFlow: monthlyIncome - monthlyExpenses,
     };
-  }, [accountBalances, activeAccounts, state.transactions, state.exchangeRates]);
+  }, [accountBalances, activeAccounts, state.transactions, state.exchangeRates, state.settings.currency]);
 
   const upcomingPayments = useMemo(() => {
     return state.subscriptions
@@ -985,11 +1201,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (dueSubs.length > 0) alerts.push({ id: 'subs', type: 'warning', icon: AlertCircle, message: `You have ${dueSubs.length} subscription(s) due in the next 7 days totaling ${formatCurrency(dueSubs.reduce((a, b) => a + b.amount, 0))}` });
 
     state.budgets.forEach(b => {
-      const spent = state.transactions.filter(t => {
-        if (t.type !== 'expense') return false;
-        if (b.targetType === "account") return t.accountId === b.categoryId;
-        return t.categoryId === b.categoryId;
-      }).reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const spent = state.transactions.filter(t => t.type === 'expense').reduce((sum, t) => {
+        if (b.targetType === "account" && t.accountId === b.categoryId) return sum + Math.abs(t.amount);
+        if (b.targetType !== "account") {
+          if (t.splits && t.splits.length > 0) {
+            const splitSum = t.splits.filter(s => s.categoryId === b.categoryId).reduce((s, split) => s + Math.abs(split.amount), 0);
+            return sum + splitSum;
+          }
+          if (t.categoryId === b.categoryId) return sum + Math.abs(t.amount);
+        }
+        return sum;
+      }, 0);
       
       const targetName = b.targetType === "account" ? `Account: ${b.category}` : `Category: ${b.category}`;
       if (spent >= b.limit * 0.9 && spent < b.limit) alerts.push({ id: `budget-${b.id}`, type: 'warning', icon: AlertCircle, message: `Your '${targetName}' budget is at ${Math.round((spent/b.limit)*100)}% capacity!` });
@@ -997,11 +1219,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
 
     const expenses = state.transactions.filter(t => t.type === 'expense' && t.categoryId !== 'transfer');
-    if (expenses.length > 0) {
-      const largest = [...expenses].sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
-      const avg = expenses.reduce((s, t) => s + Math.abs(t.amount), 0) / expenses.length;
-      if (Math.abs(largest.amount) > avg * 3 && Math.abs(largest.amount) > 100) {
-         alerts.push({ id: `anomaly-${largest.id}`, type: 'info', icon: Zap, message: `Anomaly detected: '${largest.description}' was unusually high (${formatCurrency(Math.abs(largest.amount))}).` });
+    if (expenses.length >= 3) {
+      const amounts = expenses.map(t => Math.abs(t.amount));
+      const avg = amounts.reduce((s, v) => s + v, 0) / amounts.length;
+      const stddev = Math.sqrt(amounts.reduce((s, v) => s + (v - avg) ** 2, 0) / amounts.length);
+      if (stddev > 0) {
+        const largest = [...expenses].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
+        const zScore = (Math.abs(largest.amount) - avg) / stddev;
+        if (zScore > 2.5 && Math.abs(largest.amount) > 100) {
+          alerts.push({ id: `anomaly-${largest.id}`, type: 'info', icon: Zap, message: `Anomaly detected: '${largest.description}' was unusually high (${formatCurrency(Math.abs(largest.amount))}).` });
+        }
       }
     }
     
@@ -1027,7 +1254,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       recurringPayments: state.recurringPayments,
       accountBalances,
       totals,
-      exchangeRates: state.exchangeRates,
+      exchangeRates: { ...state.exchangeRates, ...(state.customExchangeRates || {}) },
+      customExchangeRates: state.customExchangeRates,
+      investments: state.investments || [],
+      investmentTransactions: state.investmentTransactions || [],
+      goalContributions: state.goalContributions || [],
       fetchLiveRates,
       addTransaction: (transaction) => {
         const id = createId("txn");
@@ -1136,7 +1367,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
                 attachments: [],
                 transferAccountId: to.id,
                 transferAccount: to.name,
-                currency: "USD",
+                currency: from.currency || "USD",
               },
               ...current.transactions,
             ],
@@ -1144,13 +1375,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         });
         toast.success("Transfer recorded");
       },
-      addCategory: (name, type) => {
+      addCategory: (name, type, color) => {
         const id = normalizeName(name);
         setAndResolve((current) => ({
           ...current,
           categories: [
             ...current.categories,
-            { id, name: name.trim(), type, icon: "Tags", color: "bg-indigo-500/20 text-indigo-400", archived: false },
+            { id, name: name.trim(), type, icon: "Tags", color: color || "bg-indigo-500/20 text-indigo-400", archived: false },
           ],
         }));
         toast.success("Category created");
@@ -1259,9 +1490,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       updateBudget: (id, changes) => {
         setAndResolve((current) => ({
           ...current,
-          budgets: current.budgets.map((budget) => (budget.id === id ? { ...budget, ...changes } : budget)),
+          budgets: current.budgets.map((b) => (b.id === id ? { ...b, ...changes } : b)),
         }));
         toast.success("Budget updated");
+      },
+      deleteBudget: (id) => {
+        setAndResolve((current) => ({
+          ...current,
+          budgets: current.budgets.filter((b) => b.id !== id),
+        }));
+        toast.info("Budget deleted");
       },
       addGoal: (goal) => {
         setAndResolve((current) => ({
@@ -1273,11 +1511,93 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       updateGoal: (id, changes) => {
         setAndResolve((current) => ({
           ...current,
-          goals: current.goals.map((goal) => (goal.id === id ? { ...goal, ...changes } : goal)),
+          goals: current.goals.map((g) => (g.id === id ? { ...g, ...changes } : g)),
         }));
         toast.success("Goal updated");
       },
+      deleteGoal: (id) => {
+        setAndResolve((current) => ({
+          ...current,
+          goals: current.goals.filter((g) => g.id !== id),
+          goalContributions: (current.goalContributions || []).filter(c => c.goalId !== id)
+        }));
+        toast.info("Goal deleted");
+      },
+      addGoalContribution: (goalId, amount, date, accountId, notes) => {
+        setAndResolve(current => {
+          const newContrib = { id: createId("gcb"), goalId, amount, date, accountId, notes };
+          const goal = current.goals.find(g => g.id === goalId);
+          if (!goal) return current;
+          const newGoals = current.goals.map(g => g.id === goalId ? { ...g, current: g.current + amount } : g);
+          
+          let newTxns = current.transactions;
+          if (accountId) {
+            const acc = current.accounts.find(a => a.id === accountId);
+            if (acc) {
+              newTxns = [
+                {
+                  id: createId("txn"),
+                  date,
+                  description: `Contribution to ${goal.name}`,
+                  categoryId: "transfer",
+                  category: "Transfer",
+                  accountId,
+                  account: acc.name,
+                  amount: -Math.abs(amount),
+                  type: "transfer",
+                  status: "Completed",
+                  notes: notes || `Goal contribution`,
+                  tags: ["goal-contribution"],
+                  attachments: [],
+                  currency: acc.currency || "USD"
+                },
+                ...current.transactions
+              ];
+            }
+          }
+          
+          return {
+            ...current,
+            goals: newGoals,
+            goalContributions: [newContrib, ...(current.goalContributions || [])],
+            transactions: newTxns
+          };
+        });
+        toast.success("Contribution added");
+      },
+      updateGoalContribution: (id, changes) => {
+        setAndResolve(current => {
+          const contrib = (current.goalContributions || []).find(c => c.id === id);
+          if (!contrib) return current;
+          const diff = (changes.amount ?? contrib.amount) - contrib.amount;
+          
+          return {
+            ...current,
+            goalContributions: (current.goalContributions || []).map(c => c.id === id ? { ...c, ...changes } : c),
+            goals: current.goals.map(g => g.id === contrib.goalId ? { ...g, current: g.current + diff } : g)
+          };
+        });
+        toast.success("Contribution updated");
+      },
+      deleteGoalContribution: (id) => {
+        setAndResolve(current => {
+          const contrib = (current.goalContributions || []).find(c => c.id === id);
+          if (!contrib) return current;
+          return {
+            ...current,
+            goalContributions: (current.goalContributions || []).filter(c => c.id !== id),
+            goals: current.goals.map(g => g.id === contrib.goalId ? { ...g, current: g.current - contrib.amount } : g)
+          };
+        });
+        toast.info("Contribution deleted");
+      },
       updateSettings: (settings) => {
+        if (settings.firstName !== undefined || settings.lastName !== undefined || settings.email !== undefined || settings.avatarUrl !== undefined) {
+          saveGlobalProfile({
+            ...state.settings,
+            ...settings
+          }).catch(console.error);
+        }
         setAndResolve((current) => ({
           ...current,
           settings: { ...current.settings, ...settings },
@@ -1291,6 +1611,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           date: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date()),
           type: kind === "Category" ? "CSV" : "PDF",
           size: `${Math.max(1, Math.round(state.transactions.length * 0.18))}.${state.transactions.length % 9} MB`,
+          snapshotTotals: {
+            monthlyIncome: totals.monthlyIncome,
+            monthlyExpenses: totals.monthlyExpenses,
+            netProfit: totals.netProfit
+          },
+          snapshotTxnCount: state.transactions.length
         };
         setAndResolve((current) => ({ ...current, reports: [report, ...current.reports] }));
         return report;
@@ -1318,6 +1644,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       resetDemoData: () => {
         setState(initialFinanceState);
         toast.success("Demo data restored");
+      },
+      updateCustomExchangeRates: (rates) => {
+        setAndResolve((current) => ({
+          ...current,
+          customExchangeRates: rates
+        }));
+        toast.success("Exchange rates updated");
       },
       search: (query) => {
         const needle = query.trim().toLowerCase();
@@ -1368,11 +1701,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       subscriptions: state.subscriptions,
       subscriptionOverrides: state.subscriptionOverrides,
       upcomingPayments,
-      addLoanEntity: (name, category, notes, currency) => {
-        const id = "loan-" + Date.now();
-        setAndResolve(current => ({
+      addLoanEntity: (name, category, notes, color, currency) => {
+        const id = createId("loan");
+        setAndResolve((current) => ({
           ...current,
-          loanEntities: [...current.loanEntities, { id, name, category, notes, archived: false, currency: currency || "USD" }]
+          loanEntities: [
+            ...current.loanEntities,
+            { id, name, category, notes, color, currency: currency || "USD", archived: false },
+          ],
         }));
         toast.success("Loan entity added");
         return id;
@@ -1425,6 +1761,26 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         });
         toast.success("Loan transaction added");
       },
+      updateLoanTransaction: (id, changes) => {
+        setAndResolve(current => {
+          let updatedTransactions = current.transactions;
+          const oldLtxn = current.loanTransactions.find(t => t.id === id);
+          if (!oldLtxn) return current;
+          const newLtxn = { ...oldLtxn, ...changes };
+          
+          if (oldLtxn.amount !== newLtxn.amount || oldLtxn.date !== newLtxn.date) {
+            // we should technically update the linked transaction if it exists. 
+            // for simplicity if it has a linked transaction we skip it, or we just update loan state.
+            // but the user wants to be able to edit loan transactions. 
+          }
+          
+          return {
+            ...current,
+            loanTransactions: current.loanTransactions.map(t => t.id === id ? newLtxn : t)
+          };
+        });
+        toast.success("Loan transaction updated");
+      },
       deleteLoanTransaction: (id) => {
         setAndResolve(current => ({
           ...current,
@@ -1472,10 +1828,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         toast.info("Subscription paused");
       },
       resumeSubscription: (id) => {
-        setAndResolve(current => ({
-          ...current,
-          subscriptions: current.subscriptions.map(s => s.id === id ? { ...s, status: "active" as const } : s)
-        }));
+        setAndResolve(current => {
+          const sub = current.subscriptions.find(s => s.id === id);
+          if (!sub) return current;
+          let nextDue = sub.nextDueDate;
+          const today = new Date().toISOString().slice(0, 10);
+          while (nextDue < today) {
+            nextDue = advanceNextDueDate(nextDue, sub.frequency, sub.customIntervalDays);
+          }
+          return {
+            ...current,
+            subscriptions: current.subscriptions.map(s => s.id === id ? { ...s, status: "active", nextDueDate: nextDue } : s)
+          };
+        });
         toast.success("Subscription resumed");
       },
       addSubscriptionOverride: (subscriptionId, period, overrides) => {
@@ -1569,11 +1934,49 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       },
       workspaces: getWorkspaces(),
       activeWorkspaceId: getActiveWorkspaceId(),
-      createWorkspace: (name: string) => {
+      createWorkspace: async (name: string, templateId: string, withDemoData?: boolean) => {
         const id = createId("ws");
         const ws = getWorkspaces();
         ws.push({ id, name });
         setWorkspaces(ws);
+        
+        let initialState = emptyFinanceState;
+        
+        if (withDemoData) {
+          initialState = initialFinanceState;
+        } else {
+          const template = vaultTemplates.find(t => t.id === templateId) || vaultTemplates[0];
+          initialState = {
+            ...emptyFinanceState,
+            accounts: template.accounts,
+            categories: template.categories
+          };
+        }
+        
+        const dbName = `flowledger-workspace-${id}`;
+        
+        try {
+          const db = await new Promise<IDBDatabase>((resolve, reject) => {
+            const req = indexedDB.open(dbName, 1);
+            req.onupgradeneeded = () => {
+              if (!req.result.objectStoreNames.contains(indexedStoreName)) {
+                req.result.createObjectStore(indexedStoreName);
+              }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+
+          await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(indexedStoreName, "readwrite");
+            tx.objectStore(indexedStoreName).put(initialState, indexedStateKey);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+        } catch (err) {
+          console.error("Failed to seed new workspace", err);
+        }
+
         setActiveWorkspaceId(id);
         window.location.reload();
       },
@@ -1613,6 +2016,88 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
             settings: { ...current.settings, dismissedAlerts }
           };
         });
+      },
+      addInvestmentAsset: (asset) => {
+        const id = createId("inv");
+        setAndResolve((current) => ({
+          ...current,
+          investments: [...(current.investments || []), { ...asset, id }]
+        }));
+        toast.success("Asset added");
+        return id;
+      },
+      updateInvestmentAsset: (id, changes) => {
+        setAndResolve((current) => ({
+          ...current,
+          investments: (current.investments || []).map(a => a.id === id ? { ...a, ...changes } : a)
+        }));
+        toast.success("Asset updated");
+      },
+      deleteInvestmentAsset: (id) => {
+        setAndResolve((current) => ({
+          ...current,
+          investments: (current.investments || []).filter(a => a.id !== id),
+          investmentTransactions: (current.investmentTransactions || []).filter(t => t.assetId !== id)
+        }));
+        toast.info("Asset deleted");
+      },
+      addInvestmentTransaction: (txn, accountId) => {
+        const id = createId("itxn");
+        setAndResolve(current => {
+          let newTxns = current.transactions;
+          if (accountId) {
+            const acc = current.accounts.find(a => a.id === accountId);
+            const asset = current.investments.find(a => a.id === txn.assetId);
+            if (acc && asset) {
+              const totalCost = (txn.shares * txn.price) + (txn.fees || 0);
+              newTxns = [
+                {
+                  id: createId("txn"),
+                  date: txn.date,
+                  description: `${txn.type === 'buy' ? 'Buy' : 'Sell'} ${asset.symbol}`,
+                  categoryId: "transfer",
+                  category: "Investments",
+                  accountId,
+                  account: acc.name,
+                  amount: txn.type === 'buy' ? -totalCost : totalCost,
+                  type: txn.type === 'buy' ? "expense" : "income",
+                  status: "Completed",
+                  notes: `Trade ${txn.shares} shares of ${asset.symbol} @ ${txn.price}`,
+                  tags: ["investment"],
+                  attachments: [],
+                  currency: acc.currency || "USD"
+                },
+                ...current.transactions
+              ];
+            }
+          }
+          return {
+            ...current,
+            transactions: newTxns,
+            investmentTransactions: [{ ...txn, id }, ...current.investmentTransactions]
+          };
+        });
+        toast.success("Trade recorded");
+      },
+      deleteInvestmentTransaction: (id) => {
+        setAndResolve((current) => ({
+          ...current,
+          investmentTransactions: (current.investmentTransactions || []).filter(t => t.id !== id)
+        }));
+        toast.info("Transaction deleted");
+      },
+      updateInvestmentPrice: (id, newPrice) => {
+        setAndResolve((current) => ({
+          ...current,
+          investments: (current.investments || []).map(a => a.id === id ? { ...a, currentPrice: newPrice } : a)
+        }));
+        toast.success("Price updated");
+      },
+      toggleReconciled: (id) => {
+        setAndResolve((current) => ({
+          ...current,
+          transactions: current.transactions.map(t => t.id === id ? { ...t, reconciled: !t.reconciled } : t)
+        }));
       },
     };
   }, [state, isReady, transactions, activeCategories, activeAccounts, accountBalances, totals, upcomingPayments, smartAlerts]);

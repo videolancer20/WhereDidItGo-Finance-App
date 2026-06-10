@@ -6,9 +6,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   X,
+  Trash2,
 } from "lucide-react";
 import { type BudgetRecord, useFinance } from "../data/financeStore";
 import { formatCurrency, STANDARD_COLORS } from "../utils";
+import { budgetPacing } from "../analyticsEngine";
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { ColorSelect } from '../components/ui/ColorSelect';
 
@@ -104,26 +106,47 @@ function BudgetModal({ budget, onClose }: { budget?: BudgetRecord; onClose: () =
 }
 
 export function Budgets() {
-  const { budgets, transactions } = useFinance();
+  const { budgets, transactions, deleteBudget, exchangeRates, globalCurrency } = useFinance();
   const [editing, setEditing] = useState<BudgetRecord | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   const enrichedBudgets = useMemo(() => {
     return budgets.map((budget) => {
+      const bCur = (budget as any).currency || "USD";
       const spent = transactions
         .filter((transaction) => {
           if (transaction.type !== "expense") return false;
+          if (!transaction.date.startsWith(budget.month)) return false;
           if (budget.targetType === "account") return transaction.accountId === budget.categoryId;
           return transaction.categoryId === budget.categoryId;
         })
-        .reduce((sum, transaction) => sum + Math.abs(transaction.amount), 0);
+        .reduce((sum, transaction) => {
+          const tCur = transaction.currency || "USD";
+          const rateToUse = transaction.exchangeRate || exchangeRates[tCur] || 1;
+          const amountInUSD = Math.abs(transaction.amount) / rateToUse;
+          const targetRate = exchangeRates[bCur] || 1;
+          return sum + (amountInUSD * targetRate);
+        }, 0);
       return { ...budget, spent };
     });
-  }, [budgets, transactions]);
+  }, [budgets, transactions, exchangeRates]);
 
-  const totalBudget = enrichedBudgets.reduce((sum, budget) => sum + budget.limit, 0);
-  const totalSpent = enrichedBudgets.reduce((sum, budget) => sum + budget.spent, 0);
+  const totalBudget = enrichedBudgets.reduce((sum, budget) => {
+    const bCur = (budget as any).currency || "USD";
+    const amountInUSD = budget.limit / (exchangeRates[bCur] || 1);
+    const targetRate = globalCurrency === "MULTI" ? 1 : (exchangeRates[globalCurrency] || 1);
+    return sum + (amountInUSD * targetRate);
+  }, 0);
+
+  const totalSpent = enrichedBudgets.reduce((sum, budget) => {
+    const bCur = (budget as any).currency || "USD";
+    const amountInUSD = budget.spent / (exchangeRates[bCur] || 1);
+    const targetRate = globalCurrency === "MULTI" ? 1 : (exchangeRates[globalCurrency] || 1);
+    return sum + (amountInUSD * targetRate);
+  }, 0);
+
   const overBudget = enrichedBudgets.filter((budget) => budget.spent > budget.limit).length;
+  const displayCur = globalCurrency === "MULTI" ? "USD" : globalCurrency;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
@@ -142,13 +165,13 @@ export function Budgets() {
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400"><PiggyBank className="w-6 h-6" /></div>
-            <div><p className="text-sm font-medium text-zinc-400">Total Budget</p><h3 className="text-2xl font-semibold text-zinc-100">{formatCurrency(totalBudget)}</h3></div>
+            <div><p className="text-sm font-medium text-zinc-400">Total Budget</p><h3 className="text-2xl font-semibold text-zinc-100">{formatCurrency(totalBudget, displayCur)}</h3></div>
           </div>
         </div>
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400"><CheckCircle2 className="w-6 h-6" /></div>
-            <div><p className="text-sm font-medium text-zinc-400">Total Spent</p><h3 className="text-2xl font-semibold text-zinc-100">{formatCurrency(totalSpent)}</h3></div>
+            <div><p className="text-sm font-medium text-zinc-400">Total Spent</p><h3 className="text-2xl font-semibold text-zinc-100">{formatCurrency(totalSpent, displayCur)}</h3></div>
           </div>
         </div>
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
@@ -166,26 +189,52 @@ export function Budgets() {
             const percentage = budget.limit ? (budget.spent / budget.limit) * 100 : 0;
             const isOver = percentage > 100;
             const isNear = percentage >= 85 && percentage <= 100;
-            const forecast = percentage > 75 ? "High pressure" : "Comfortable";
+            const now = new Date();
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const daysElapsed = now.getDate();
+            const pacing = budgetPacing(budget.spent, budget.limit, daysElapsed, daysInMonth);
+            const bCur = (budget as any).currency || "USD";
+            const pacingConfig = {
+              "under-pace": { label: "Under pace", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+              "on-pace": { label: "On pace", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+              "over-pace": { label: "Over pace", color: "text-rose-400 bg-rose-500/10 border-rose-500/20" },
+            };
+            const pacingBadge = pacingConfig[pacing.status];
 
             return (
               <div key={budget.id} className="p-5 rounded-xl bg-zinc-800/30 border border-zinc-800/50 hover:bg-zinc-800/50 transition-colors">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-medium text-zinc-200">{budget.category}</h3>
-                  <button onClick={() => setEditing(budget)} className="text-zinc-500 hover:text-zinc-300" aria-label={`Edit ${budget.category} budget`}>
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditing(budget)} className="text-zinc-500 hover:text-zinc-300" aria-label={`Edit ${budget.category} budget`}>
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => {
+                      if (window.confirm("Delete this budget?")) deleteBudget(budget.id);
+                    }} className="text-zinc-500 hover:text-rose-400" aria-label={`Delete ${budget.category} budget`}>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-end gap-2 mb-3">
-                  <span className={`text-2xl font-semibold ${isOver ? "text-rose-400" : "text-zinc-100"}`}>{formatCurrency(budget.spent)}</span>
-                  <span className="text-sm text-zinc-500 mb-1">of {formatCurrency(budget.limit)}</span>
+                  <span className={`text-2xl font-semibold ${isOver ? "text-rose-400" : "text-zinc-100"}`}>{formatCurrency(budget.spent, bCur)}</span>
+                  <span className="text-sm text-zinc-500 mb-1">of {formatCurrency(budget.limit, bCur)}</span>
                 </div>
                 <div className="h-2.5 w-full bg-zinc-800 rounded-full overflow-hidden mb-2">
                   <div className={`h-full rounded-full transition-all duration-500 ${isOver ? "bg-rose-500" : budget.color}`} style={{ width: `${Math.min(percentage, 100)}%` }} />
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className={isOver ? "text-rose-400 font-medium" : isNear ? "text-amber-400 font-medium" : "text-zinc-500"}>{isOver ? "Over budget!" : isNear ? "Nearing limit" : "On track"}</span>
-                  <span className="text-zinc-400">{percentage.toFixed(0)}% • {forecast}</span>
+                  <div className="flex items-center gap-2">
+                    <span className={isOver ? "text-rose-400 font-medium" : isNear ? "text-amber-400 font-medium" : "text-zinc-500"}>{isOver ? "Over budget!" : isNear ? "Nearing limit" : "On track"}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border ${pacingBadge.color}`}>{pacingBadge.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-zinc-400">
+                    <span>{percentage.toFixed(0)}%</span>
+                    <span>Proj: {formatCurrency(pacing.projectedMonthEnd, bCur)}</span>
+                    {pacing.status === "over-pace" && pacing.projectedOverBy > 0 && (
+                      <span className="text-rose-400 font-medium">+{formatCurrency(pacing.projectedOverBy, bCur)} over</span>
+                    )}
+                  </div>
                 </div>
               </div>
             );

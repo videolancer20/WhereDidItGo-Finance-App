@@ -28,13 +28,13 @@ function getIcon(name: string) {
   return iconMap[name as keyof typeof iconMap] ?? Wallet;
 }
 
-interface AccountModalProps {
+export interface AccountModalProps {
   account?: AccountRecord;
   mode: "create" | "edit" | "transfer";
   onClose: () => void;
 }
 
-function AccountModal({ account, mode, onClose }: AccountModalProps) {
+export function AccountModal({ account, mode, onClose }: AccountModalProps) {
   const { accounts, addAccount, updateAccount, archiveAccount, addTransfer, accountBalances, currencies } = useFinance();
   const [name, setName] = useState(account?.name ?? "");
   const [type, setType] = useState(account?.type ?? "Bank Account");
@@ -171,9 +171,148 @@ function AccountModal({ account, mode, onClose }: AccountModalProps) {
   );
 }
 
+function AccountDetailModal({ account, onClose }: { account: AccountRecord; onClose: () => void }) {
+  const { transactions } = useFinance();
+  const accountTxns = transactions.filter((t) => t.accountId === account.id || t.transferAccountId === account.id).slice(0, 50);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={onClose} aria-label="Close" />
+      <div className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-100">{account.name} History</h2>
+            <p className="text-sm text-zinc-500">Recent transactions for this account.</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="overflow-y-auto p-6 space-y-4">
+          {accountTxns.length === 0 ? (
+            <p className="text-zinc-500 text-center py-8">No transactions found.</p>
+          ) : (
+            accountTxns.map((t) => {
+              const isOutflow = t.type === "expense" || (t.type === "transfer" && t.accountId === account.id);
+              return (
+                <div key={t.id} className="flex justify-between items-center p-3 rounded-xl border border-zinc-800/50 hover:bg-zinc-800/20">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-200">{t.description}</p>
+                    <p className="text-xs text-zinc-500">{t.date} • {t.category}</p>
+                  </div>
+                  <p className={`text-sm font-medium ${isOutflow ? "text-zinc-200" : "text-emerald-400"}`}>
+                    {isOutflow ? "-" : "+"}{formatCurrency(t.amount)}
+                  </p>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReconcileModal({ account, onClose }: { account: AccountRecord; onClose: () => void }) {
+  const { transactions, toggleReconciled } = useFinance();
+  const [statementBalance, setStatementBalance] = useState("");
+  
+  // Only get transactions for this account
+  const accountTxns = transactions.filter((t) => t.accountId === account.id || t.transferAccountId === account.id);
+  
+  // Real balance
+  const balance = accountTxns.reduce((sum, t) => {
+    if (t.accountId === account.id) {
+      return sum + (t.type === "income" ? Math.abs(t.amount) : -Math.abs(t.amount));
+    }
+    if (t.transferAccountId === account.id) {
+      return sum + Math.abs(t.amount);
+    }
+    return sum;
+  }, account.openingBalance);
+
+  const unreconciledTxns = accountTxns.filter(t => !t.reconciled);
+  const clearedBalance = balance - unreconciledTxns.reduce((sum, t) => {
+    if (t.accountId === account.id) {
+      return sum + (t.type === "income" ? Math.abs(t.amount) : -Math.abs(t.amount));
+    }
+    if (t.transferAccountId === account.id) {
+      return sum + Math.abs(t.amount);
+    }
+    return sum;
+  }, 0);
+
+  const target = parseFloat(statementBalance) || 0;
+  const diff = clearedBalance - target;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={onClose} aria-label="Close" />
+      <div className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-100">Reconcile {account.name}</h2>
+            <p className="text-sm text-zinc-500">Match app transactions with your real bank statement.</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-6 bg-zinc-900/50 border-b border-zinc-800 flex items-center gap-6 shrink-0">
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Statement Balance</label>
+            <input value={statementBalance} onChange={e => setStatementBalance(e.target.value)} type="number" step="any" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-sm text-zinc-200" placeholder="0.00" />
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Cleared Balance</label>
+            <div className="py-2 text-lg font-semibold text-zinc-100">{formatCurrency(clearedBalance)}</div>
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Difference</label>
+            <div className={`py-2 text-lg font-semibold ${diff === 0 && statementBalance ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(Math.abs(diff))}</div>
+          </div>
+        </div>
+        <div className="overflow-y-auto p-6 space-y-4">
+          <h3 className="text-sm font-medium text-zinc-300">Unreconciled Transactions</h3>
+          {unreconciledTxns.length === 0 ? (
+            <p className="text-zinc-500 text-center py-8">All transactions are reconciled.</p>
+          ) : (
+            unreconciledTxns.map((t) => {
+              const isOutflow = t.type === "expense" || (t.type === "transfer" && t.accountId === account.id);
+              return (
+                <div key={t.id} onClick={() => toggleReconciled(t.id)} className="flex justify-between items-center p-3 rounded-xl border border-zinc-800 hover:border-indigo-500/50 hover:bg-indigo-500/10 cursor-pointer transition-colors">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-200">{t.description}</p>
+                    <p className="text-xs text-zinc-500">{t.date} • {t.category}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <p className={`text-sm font-medium ${isOutflow ? "text-zinc-200" : "text-emerald-400"}`}>
+                      {isOutflow ? "-" : "+"}{formatCurrency(t.amount)}
+                    </p>
+                    <div className="w-5 h-5 rounded border border-zinc-600 flex items-center justify-center">
+                      {t.reconciled && <div className="w-3 h-3 bg-indigo-500 rounded-sm" />}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+        <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-900 flex justify-end gap-3 shrink-0">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200">Close</button>
+          <button disabled={diff !== 0 || !statementBalance} onClick={onClose} className="px-5 py-2 bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-600 text-white text-sm font-medium rounded-lg">
+            Finish Reconciliation
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Accounts() {
-  const { accounts, accountBalances } = useFinance();
-  const [modal, setModal] = useState<{ mode: "create" | "edit" | "transfer"; account?: AccountRecord } | null>(null);
+  const { accounts, accountBalances, settings, exchangeRates, currencies } = useFinance();
+  const [modal, setModal] = useState<{ mode: "create" | "edit" | "transfer" | "detail" | "reconcile"; account?: AccountRecord } | null>(null);
+  const [displayCurrency, setDisplayCurrency] = useState(settings.currency || "USD");
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
@@ -182,16 +321,24 @@ export function Accounts() {
           <h1 className="text-2xl font-semibold text-zinc-100">Accounts</h1>
           <p className="text-zinc-500 text-sm mt-1">Manage connected accounts, transfers, and reconciliation.</p>
         </div>
-        <button onClick={() => setModal({ mode: "create" })} className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg shadow-lg shadow-indigo-500/20 transition-all">
-          <Plus className="w-4 h-4" />
-          Link Account
-        </button>
+        <div className="flex items-center gap-3 z-20">
+          <div className="w-32">
+            <CustomSelect value={displayCurrency} onChange={setDisplayCurrency} options={currencies.map(c => ({ label: c, value: c }))} />
+          </div>
+          <button onClick={() => setModal({ mode: "create" })} className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg shadow-lg shadow-indigo-500/20 transition-all">
+            <Plus className="w-4 h-4" />
+            Link Account
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {accounts.map((acc) => {
           const chartData = acc.trend.map((val, i) => ({ name: i, value: val }));
-          const balance = accountBalances[acc.id] ?? acc.openingBalance;
+          const rawBalance = accountBalances[acc.id] ?? acc.openingBalance;
+          const baseRate = exchangeRates[acc.currency || "USD"] || 1;
+          const targetRate = displayCurrency === "USD" ? 1 : (exchangeRates[displayCurrency] || 1);
+          const convertedBalance = (rawBalance / baseRate) * targetRate;
           const Icon = getIcon(acc.icon);
 
           return (
@@ -215,16 +362,24 @@ export function Accounts() {
                 <p className="text-sm text-zinc-400 mb-1">Current Balance</p>
                 <div className="flex items-end gap-3">
                   <h2 className="text-3xl font-semibold text-zinc-100">
-                    {balance < 0 ? "-" : ""}{formatCurrency(Math.abs(balance), acc.currency)}
+                    {convertedBalance < 0 ? "-" : ""}{formatCurrency(Math.abs(convertedBalance), displayCurrency)}
                   </h2>
                   <span className="flex items-center text-xs font-medium text-emerald-400 mb-1">
                     <ArrowUpRight className="w-3 h-3 mr-0.5" />
                     2.4%
                   </span>
                 </div>
-                <button onClick={() => setModal({ mode: "transfer", account: acc })} className="mt-4 px-3 py-1.5 rounded-lg border border-zinc-800 text-xs text-zinc-400 hover:bg-zinc-800/60">
-                  Transfer
-                </button>
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => setModal({ mode: "transfer", account: acc })} className="px-3 py-1.5 rounded-lg border border-zinc-800 text-xs text-zinc-400 hover:bg-zinc-800/60 transition-colors">
+                    Transfer
+                  </button>
+                  <button onClick={() => setModal({ mode: "detail", account: acc })} className="px-3 py-1.5 rounded-lg border border-zinc-800 text-xs text-zinc-400 hover:bg-zinc-800/60 transition-colors">
+                    History
+                  </button>
+                  <button onClick={() => setModal({ mode: "reconcile", account: acc })} className="px-3 py-1.5 rounded-lg border border-indigo-500/30 text-xs text-indigo-400 hover:bg-indigo-500/20 transition-colors">
+                    Reconcile
+                  </button>
+                </div>
               </div>
 
               <div className="absolute bottom-0 left-0 right-0 h-24 opacity-30 group-hover:opacity-60 transition-opacity">
@@ -245,7 +400,13 @@ export function Accounts() {
         })}
       </div>
 
-      {modal && <AccountModal mode={modal.mode} account={modal.account} onClose={() => setModal(null)} />}
+      {modal && modal.mode === "detail" && modal.account ? (
+        <AccountDetailModal account={modal.account} onClose={() => setModal(null)} />
+      ) : modal && modal.mode === "reconcile" && modal.account ? (
+        <ReconcileModal account={modal.account} onClose={() => setModal(null)} />
+      ) : modal ? (
+        <AccountModal mode={modal.mode as any} account={modal.account} onClose={() => setModal(null)} />
+      ) : null}
     </div>
   );
 }

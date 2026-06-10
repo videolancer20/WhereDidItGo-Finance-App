@@ -47,7 +47,7 @@ const categoryIcons: Record<string, any> = {
 
 export function CategoryDetail() {
   const { id } = useParams();
-  const { categories, transactions } = useFinance();
+  const { categories, transactions, settings } = useFinance();
   
   const category = categories.find(c => c.id === id) || { id: id || "unknown", name: id || "Unknown", type: "expense", color: "bg-zinc-500/20 text-zinc-400" };
   const Icon = categoryIcons[category.id] || Tags;
@@ -243,7 +243,7 @@ export function CategoryDetail() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                 <XAxis dataKey="name" stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} domain={[monthlyData[currentLeft]?.name || 'dataMin', monthlyData[currentRight]?.name || 'dataMax']} allowDataOverflow />
                 <YAxis stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value/1000}k`} />
-                <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }} itemStyle={{ color: '#e4e4e7' }} />
+                <Tooltip formatter={(value: number) => formatCurrency(value, settings?.currency)} contentStyle={{ backgroundColor: 'var(--zinc-900)', borderColor: 'var(--zinc-800)', borderRadius: '8px', color: 'var(--zinc-200)' }} itemStyle={{ color: 'var(--zinc-200)' }} />
                 <Area type="monotone" dataKey="revenue" name="Income" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" animationDuration={300} />
                 <Area type="monotone" dataKey="expense" name="Expense" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorExp)" animationDuration={300} />
 
@@ -284,9 +284,9 @@ export function CategoryDetail() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={growthTrend}>
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }}
-                    itemStyle={{ color: '#e4e4e7' }}
-                    cursor={{ fill: '#27272a', opacity: 0.4 }}
+                    contentStyle={{ backgroundColor: 'var(--zinc-900)', borderColor: 'var(--zinc-800)', borderRadius: '8px', color: 'var(--zinc-200)' }}
+                    itemStyle={{ color: 'var(--zinc-200)' }}
+                    cursor={{ fill: 'var(--zinc-800)', opacity: 0.4 }}
                     formatter={(val: number) => [`${val.toFixed(1)}%`, 'MoM Growth']}
                   />
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />

@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { useSearchParams } from "react-router";
 import {
   Search,
@@ -11,7 +11,9 @@ import {
   Copy,
   Trash2,
   X,
+  Pencil,
 } from "lucide-react";
+import { CustomSelect } from "../components/ui/CustomSelect";
 import {
   exportTransactionsCsv,
   type FinanceAttachment,
@@ -19,7 +21,8 @@ import {
   useFinance,
 } from "../data/financeStore";
 import { formatCurrency } from "../utils";
-
+import { TimeFilter } from "../components/TimeFilter";
+import { TransactionDetailModal } from "../components/TransactionDetailModal";
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -49,10 +52,6 @@ function parseCsvLine(line: string) {
   return values;
 }
 
-import { TimeFilter } from "../components/TimeFilter";
-import { TransactionDetailModal } from "../components/TransactionDetailModal";
-import { CustomSelect } from '../components/ui/CustomSelect';
-
 export function Transactions() {
   const {
     transactions,
@@ -74,6 +73,8 @@ export function Transactions() {
   const [page, setPage] = useState(1);
   const [dateRange, setDateRange] = useState({ start: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10) });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkCategoryModalOpen, setIsBulkCategoryModalOpen] = useState(false);
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [editing, setEditing] = useState<FinanceTransaction | null>(null);
   const [pageSize, setPageSize] = useState(100);
 
@@ -112,6 +113,26 @@ export function Transactions() {
   const totalPages = Math.max(1, Math.ceil(visibleTransactions.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pagedTransactions = visibleTransactions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const groupedPagedTransactions = useMemo(() => {
+    const groupsMap: Record<string, typeof pagedTransactions> = {};
+    pagedTransactions.forEach(txn => {
+      const dateKey = new Date(txn.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      if (!groupsMap[dateKey]) groupsMap[dateKey] = [];
+      groupsMap[dateKey].push(txn);
+    });
+    
+    const orderedGroups: { date: string, transactions: typeof pagedTransactions }[] = [];
+    const seen = new Set<string>();
+    pagedTransactions.forEach(txn => {
+      const dateKey = new Date(txn.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      if (!seen.has(dateKey)) {
+        seen.add(dateKey);
+        orderedGroups.push({ date: dateKey, transactions: groupsMap[dateKey] });
+      }
+    });
+    return orderedGroups;
+  }, [pagedTransactions]);
 
   function toggleSort(key: "date" | "amount") {
     if (sortKey === key) {
@@ -247,7 +268,7 @@ export function Transactions() {
           <div className="px-4 py-3 border-b border-zinc-800/60 bg-indigo-500/10 flex flex-wrap items-center justify-between gap-3">
             <span className="text-sm text-indigo-300">{selectedIds.length} selected</span>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => bulkUpdateTransactions(selectedIds, { categoryId: "business-expenses" })} className="px-3 py-1.5 rounded-lg border border-zinc-700 text-sm text-zinc-300 hover:bg-zinc-800/60">Mark business</button>
+              <button onClick={() => setIsBulkCategoryModalOpen(true)} className="px-3 py-1.5 rounded-lg border border-zinc-700 text-sm text-zinc-300 hover:bg-zinc-800/60">Change Category</button>
               <button onClick={() => {
                 if (window.confirm("Delete selected transactions?")) {
                   bulkDeleteTransactions(selectedIds);
@@ -282,50 +303,59 @@ export function Transactions() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
-              {pagedTransactions.map((transaction) => (
-                <tr key={transaction.id} className="group hover:bg-zinc-800/30 transition-colors">
-                  <td className="px-6 py-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(transaction.id)}
-                      onChange={() => toggleSelection(transaction.id)}
-                      className="accent-indigo-500"
-                      aria-label={`Select ${transaction.description}`}
-                    />
-                  </td>
-                  <td className="px-6 py-4 text-zinc-400 whitespace-nowrap">{formatDate(transaction.date)}</td>
-                  <td className="px-6 py-4 cursor-pointer" onClick={() => {
-                    setEditing(transaction);
-                    setSearchParams({ focus: transaction.id });
-                  }}>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${transaction.type === "income" ? "bg-emerald-500/10 text-emerald-400" : transaction.type === "transfer" ? "bg-cyan-500/10 text-cyan-400" : "bg-zinc-800 text-zinc-400"}`}>
-                        {transaction.type === "income" ? <ArrowDownRight className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
-                      </div>
-                      <div>
-                        <p className="font-medium text-zinc-200">{transaction.description}</p>
-                        <p className="text-xs text-zinc-500">{transaction.tags.length ? transaction.tags.join(", ") : transaction.notes || "No notes"}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-zinc-400"><span className="px-2.5 py-1 bg-zinc-800/50 border border-zinc-700/50 rounded-md text-xs">{transaction.category}</span></td>
-                  <td className="px-6 py-4 text-zinc-400">{transaction.account}</td>
-                  <td className={`px-6 py-4 text-right font-medium whitespace-nowrap ${transaction.type === "income" ? "text-emerald-400" : transaction.type === "transfer" ? "text-cyan-400" : "text-zinc-200"}`}>
-                    {transaction.type === "income" ? "+" : "-"}{formatCurrency(Math.abs(transaction.amount), transaction.currency)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => setEditing(transaction)} className="p-2 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 rounded-lg" aria-label={`Edit ${transaction.description}`}>
-                        <Copy className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => {
-                        if (window.confirm("Delete this transaction?")) bulkDeleteTransactions([transaction.id]);
-                      }} className="p-2 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg" aria-label={`Delete ${transaction.description}`}>
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+              {groupedPagedTransactions.map((group, groupIdx) => (
+                <Fragment key={group.date}>
+                  <tr className="bg-zinc-800/60 shadow-sm">
+                    <td colSpan={7} className="py-4 px-6 border-y border-zinc-700/50 text-sm font-bold text-zinc-100 tracking-wide backdrop-blur-sm">
+                      {group.date}
+                    </td>
+                  </tr>
+                  {group.transactions.map((transaction) => (
+                    <tr key={transaction.id} className="group hover:bg-zinc-800/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(transaction.id)}
+                          onChange={() => toggleSelection(transaction.id)}
+                          className="accent-indigo-500"
+                          aria-label={`Select ${transaction.description}`}
+                        />
+                      </td>
+                      <td className="px-6 py-4 text-zinc-400 whitespace-nowrap">{formatDate(transaction.date)}</td>
+                      <td className="px-6 py-4 cursor-pointer" onClick={() => {
+                        setEditing(transaction);
+                        setSearchParams({ focus: transaction.id });
+                      }}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${transaction.type === "income" ? "bg-emerald-500/10 text-emerald-400" : transaction.type === "transfer" ? "bg-cyan-500/10 text-cyan-400" : "bg-zinc-800 text-zinc-400"}`}>
+                            {transaction.type === "income" ? <ArrowDownRight className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                          </div>
+                          <div>
+                            <p className="font-medium text-zinc-200">{transaction.description}</p>
+                            <p className="text-xs text-zinc-500">{transaction.tags.length ? transaction.tags.join(", ") : transaction.notes || "No notes"}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-zinc-400"><span className="px-2.5 py-1 bg-zinc-800/50 border border-zinc-700/50 rounded-md text-xs">{transaction.category}</span></td>
+                      <td className="px-6 py-4 text-zinc-400">{transaction.account}</td>
+                      <td className={`px-6 py-4 text-right font-medium whitespace-nowrap ${transaction.type === "income" ? "text-emerald-400" : transaction.type === "transfer" ? "text-cyan-400" : "text-zinc-200"}`}>
+                        {transaction.type === "income" ? "+" : "-"}{formatCurrency(Math.abs(transaction.amount), transaction.currency)}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setEditing(transaction)} className="p-2 text-zinc-400 hover:text-indigo-400 hover:bg-indigo-400/10 rounded-lg transition-colors" title="Edit">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => {
+                            if (window.confirm("Delete this transaction?")) bulkDeleteTransactions([transaction.id]);
+                          }} className="p-2 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg" aria-label={`Delete ${transaction.description}`}>
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
               {pagedTransactions.length === 0 && (
                 <tr>
@@ -368,6 +398,34 @@ export function Transactions() {
         setEditing(null);
         setSearchParams({});
       }} />}
+      {isBulkCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => setIsBulkCategoryModalOpen(false)} />
+          <div className="relative w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+            <h2 className="text-xl font-semibold text-zinc-100 mb-4">Reassign Category</h2>
+            <CustomSelect
+              value={bulkCategoryId}
+              onChange={setBulkCategoryId}
+              options={categories.map(c => ({ label: c.name, value: c.id }))}
+            />
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => setIsBulkCategoryModalOpen(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
+              <button 
+                onClick={() => {
+                  if (bulkCategoryId) {
+                    bulkUpdateTransactions(selectedIds, { categoryId: bulkCategoryId });
+                    setIsBulkCategoryModalOpen(false);
+                    setSelectedIds([]);
+                  }
+                }} 
+                className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

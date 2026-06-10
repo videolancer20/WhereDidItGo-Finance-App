@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { Plus, Building2, User as UserIcon, CheckCircle2, Circle, MoreVertical, X } from "lucide-react";
+import { Plus, Building2, User as UserIcon, CheckCircle2, Circle, MoreVertical, X, Trash2, Pencil, AlertTriangle, Clock } from "lucide-react";
+import { projectLoanPayoff } from "../analyticsEngine";
 import { useFinance } from "../data/financeStore";
 import { formatCurrency, STANDARD_COLORS } from "../utils";
 import { toast } from "sonner";
@@ -9,29 +10,62 @@ import { CustomDatePicker } from '../components/ui/CustomDatePicker';
 import { ColorSelect } from '../components/ui/ColorSelect';
 
 export function Loans() {
-  const { loanEntities, loanTransactions, addLoanEntity, updateLoanEntity, deleteLoanEntity, addLoanTransaction, deleteLoanTransaction, toggleLoanSettled } = useFinance();
+  const { settings, exchangeRates, loanEntities, loanTransactions, updateLoanTransaction, addLoanEntity, updateLoanEntity, deleteLoanEntity, addLoanTransaction, deleteLoanTransaction, toggleLoanSettled } = useFinance();
+  const displayCurrency = settings.currency || "USD";
   const [activeTab, setActiveTab] = useState<"lent" | "borrowed">("lent");
   const [isEntityModalOpen, setEntityModalOpen] = useState(false);
   const [isTransactionModalOpen, setTransactionModalOpen] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [editingTxn, setEditingTxn] = useState<any>(null);
   const [repayTxn, setRepayTxn] = useState<any>(null);
   const [showSettled, setShowSettled] = useState<Record<string, boolean>>({});
 
   const activeEntities = useMemo(() => loanEntities.filter(e => !e.archived), [loanEntities]);
 
-  const { totalLent, totalBorrowed } = useMemo(() => {
+  const { totalLent, totalBorrowed, multiLent, multiBorrowed } = useMemo(() => {
     return activeEntities.reduce((acc, entity) => {
       const txns = loanTransactions.filter(t => t.entityId === entity.id);
-      const balance = txns.reduce((sum, t) => {
-        return t.type === "lent" ? sum + t.amount : sum - t.amount;
+      if (txns.length === 0) return acc;
+
+      const balanceInDisplayCurrency = txns.reduce((sum, t) => {
+        // Use transaction currency or fallback to entity currency
+        const rateToUse = exchangeRates[t.currency || entity.currency || "USD"] || 1;
+        const amountInUSD = t.amount / rateToUse;
+        const targetRate = displayCurrency === "MULTI" ? 1 : (exchangeRates[displayCurrency] || 1);
+        const convertedAmount = amountInUSD * targetRate;
+        return t.type === "lent" ? sum + convertedAmount : sum - convertedAmount;
       }, 0);
-      
-      if (balance > 0) acc.totalLent += balance;
-      else if (balance < 0) acc.totalBorrowed += Math.abs(balance);
+
+      const entityCur = entity.currency || "USD";
+      const targetCur = displayCurrency === "MULTI" ? entityCur : displayCurrency;
+
+      if (balanceInDisplayCurrency > 0) {
+        acc.totalLent += balanceInDisplayCurrency;
+        acc.multiLent[targetCur] = (acc.multiLent[targetCur] || 0) + (displayCurrency === "MULTI" ? balanceInDisplayCurrency * (exchangeRates[entityCur] || 1) : balanceInDisplayCurrency);
+      }
+      else if (balanceInDisplayCurrency < 0) {
+        acc.totalBorrowed += Math.abs(balanceInDisplayCurrency);
+        acc.multiBorrowed[targetCur] = (acc.multiBorrowed[targetCur] || 0) + (displayCurrency === "MULTI" ? Math.abs(balanceInDisplayCurrency) * (exchangeRates[entityCur] || 1) : Math.abs(balanceInDisplayCurrency));
+      }
       
       return acc;
-    }, { totalLent: 0, totalBorrowed: 0 });
-  }, [activeEntities, loanTransactions]);
+    }, { totalLent: 0, totalBorrowed: 0, multiLent: {} as Record<string, number>, multiBorrowed: {} as Record<string, number> });
+  }, [activeEntities, loanTransactions, exchangeRates, displayCurrency]);
+
+  const renderKPIValue = (singleValue: number, multiValues: Record<string, number>, colorClass: string = "text-zinc-100") => {
+    if (displayCurrency === "MULTI") {
+      const entries = Object.entries(multiValues);
+      if (entries.length === 0) return <p className={`text-3xl font-semibold ${colorClass}`}>{formatCurrency(0, "USD")}</p>;
+      return (
+        <div className="space-y-1">
+          {entries.map(([cur, val]) => (
+            <p key={cur} className={`text-2xl font-bold ${colorClass}`}>{formatCurrency(val, cur)}</p>
+          ))}
+        </div>
+      );
+    }
+    return <p className={`text-3xl font-semibold ${colorClass}`}>{formatCurrency(singleValue, displayCurrency)}</p>;
+  };
 
   const relevantEntities = useMemo(() => {
     return activeEntities.map(entity => {
@@ -61,14 +95,21 @@ export function Loans() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
           <p className="text-sm font-medium text-zinc-400 mb-1">Total Lent</p>
-          <p className="text-3xl font-semibold text-emerald-400">{formatCurrency(totalLent)}</p>
+          {renderKPIValue(totalLent, multiLent, "text-emerald-400")}
         </div>
         <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
           <p className="text-sm font-medium text-zinc-400 mb-1">Total Borrowed</p>
-          <p className="text-3xl font-semibold text-rose-400">{formatCurrency(totalBorrowed)}</p>
+          {renderKPIValue(totalBorrowed, multiBorrowed, "text-rose-400")}
+        </div>
+        <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
+          <p className="text-sm font-medium text-zinc-400 mb-1">Net Position</p>
+          <p className={`text-3xl font-semibold ${(totalLent - totalBorrowed) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {formatCurrency(Math.abs(totalLent - totalBorrowed), displayCurrency === "MULTI" ? "USD" : displayCurrency)}
+          </p>
+          <p className="text-xs text-zinc-500 mt-1">{(totalLent - totalBorrowed) >= 0 ? 'You are owed more' : 'You owe more'}</p>
         </div>
       </div>
 
@@ -81,7 +122,17 @@ export function Loans() {
           {relevantEntities.length === 0 ? (
             <p className="text-zinc-500 text-center py-8">No active {activeTab === "lent" ? "lent" : "borrowed"} loans found.</p>
           ) : (
-            relevantEntities.map(entity => (
+            relevantEntities.map(entity => {
+              const entityRepayments = entity.txns.filter((t: any) => t.settled || t.parentId).map((t: any) => ({ date: t.date, amount: t.amount }));
+              const payoff = projectLoanPayoff(Math.abs(entity.balance), entityRepayments);
+
+              // Aging: check last transaction date
+              const allDates = entity.txns.map((t: any) => new Date(t.date).getTime());
+              const lastActivityDate = allDates.length > 0 ? Math.max(...allDates) : 0;
+              const daysSinceActivity = lastActivityDate > 0 ? Math.floor((Date.now() - lastActivityDate) / 86400000) : 0;
+              const isAging = daysSinceActivity >= 60;
+
+              return (
               <div key={entity.id} className="border border-zinc-800 rounded-xl overflow-hidden">
                 <div className="bg-zinc-950/50 p-4 border-b border-zinc-800 flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -89,13 +140,55 @@ export function Loans() {
                       {entity.category === "bank" ? <Building2 className={`w-5 h-5 ${entity.color ? '' : 'text-indigo-400'}`} /> : <UserIcon className={`w-5 h-5 ${entity.color ? '' : 'text-emerald-400'}`} />}
                     </div>
                     <div>
-                      <h3 className="font-medium text-zinc-200">{entity.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-zinc-200">{entity.name}</h3>
+                        {isAging && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full">
+                            <Clock className="w-3 h-3" /> Stale — {daysSinceActivity} days
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-zinc-500">{entity.category === "bank" ? "Bank/Institution" : "Individual"}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end">
                     <p className="text-xs text-zinc-500 mb-0.5">Outstanding Balance</p>
-                    <p className={`text-lg font-semibold ${entity.balance > 0 ? "text-emerald-400" : "text-rose-400"}`}>{formatCurrency(Math.abs(entity.balance))}</p>
+                    <div className="flex items-center gap-3">
+                      <p className={`text-lg font-semibold ${entity.balance > 0 ? "text-emerald-400" : "text-rose-400"}`}>{formatCurrency(Math.abs(entity.balance), entity.currency || displayCurrency)}</p>
+                      <div className="flex gap-1 border-l border-zinc-700 pl-3 ml-1">
+                        <button onClick={() => {
+                          setSelectedEntityId(entity.id);
+                          setEntityModalOpen(true);
+                        }} className="p-1 text-zinc-500 hover:text-indigo-400 transition-colors" title="Edit Entity">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => {
+                          if (window.confirm(`Delete ${entity.name} and all related loan transactions?`)) {
+                            deleteLoanEntity(entity.id);
+                          }
+                        }} className="p-1 text-zinc-500 hover:text-rose-400 transition-colors" title="Delete Entity">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {/* Payoff analytics */}
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap justify-end">
+                      {payoff.isStale && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full">
+                          <AlertTriangle className="w-3 h-3" /> No activity in {payoff.staleDays} days
+                        </span>
+                      )}
+                      {payoff.estimatedPayoffDate && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full">
+                          Est. payoff: {payoff.estimatedPayoffDate}
+                        </span>
+                      )}
+                      {payoff.monthlyRepaymentRate > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700 rounded-full">
+                          {formatCurrency(payoff.monthlyRepaymentRate, entity.currency || displayCurrency)}/mo avg
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="divide-y divide-zinc-800/50">
@@ -121,9 +214,15 @@ export function Loans() {
                           </div>
                           <div className="flex items-center gap-4">
                             <div className="text-right">
-                              <p className={`text-sm font-medium ${txn.type === "lent" ? "text-emerald-400" : "text-rose-400"}`}>{formatCurrency(remainingAmount)}</p>
-                              {subpayments.length > 0 && <p className="text-[10px] text-zinc-500">of {formatCurrency(txn.amount)}</p>}
+                              <p className={`text-sm font-medium ${txn.type === "lent" ? "text-emerald-400" : "text-rose-400"}`}>{formatCurrency(remainingAmount, txn.currency || entity.currency || displayCurrency)}</p>
+                              {subpayments.length > 0 && <p className="text-[10px] text-zinc-500">of {formatCurrency(txn.amount, txn.currency || entity.currency || displayCurrency)}</p>}
                             </div>
+                            <button onClick={() => {
+                              setEditingTxn(txn);
+                              setTransactionModalOpen(true);
+                            }} className="text-zinc-600 hover:text-indigo-400 transition-colors">
+                              <Pencil className="w-4 h-4" />
+                            </button>
                             <button onClick={() => { if(window.confirm("Delete record?")) deleteLoanTransaction(txn.id); }} className="text-zinc-600 hover:text-rose-400 transition-colors">
                               <X className="w-4 h-4" />
                             </button>
@@ -138,7 +237,7 @@ export function Loans() {
                                   <p className="text-[10px] text-zinc-600">{new Date(sub.date).toLocaleDateString()}</p>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                  <p className="text-xs text-zinc-500">{formatCurrency(sub.amount)}</p>
+                                  <p className="text-xs text-zinc-500">{formatCurrency(sub.amount, sub.currency || txn.currency || entity.currency || displayCurrency)}</p>
                                   <button onClick={() => { if(window.confirm("Delete partial payment?")) deleteLoanTransaction(sub.id); }} className="text-zinc-600 hover:text-rose-400 transition-colors">
                                     <X className="w-3 h-3" />
                                   </button>
@@ -177,7 +276,7 @@ export function Loans() {
                               <p className="text-xs text-zinc-600">{new Date(txn.date).toLocaleDateString()}</p>
                             </div>
                           </div>
-                          <p className="text-sm text-zinc-500">{formatCurrency(remainingAmount)}</p>
+                          <p className="text-sm text-zinc-500">{formatCurrency(remainingAmount, txn.currency || entity.currency || displayCurrency)}</p>
                         </div>
                         {subpayments.length > 0 && (
                           <div className="bg-zinc-950/30 pl-16 pr-4 py-2 space-y-2">
@@ -187,7 +286,7 @@ export function Loans() {
                                   <p className="text-xs text-zinc-500">{sub.notes}</p>
                                   <p className="text-[10px] text-zinc-600">{new Date(sub.date).toLocaleDateString()}</p>
                                 </div>
-                                <p className="text-xs text-zinc-600">{formatCurrency(sub.amount)}</p>
+                                <p className="text-xs text-zinc-600">{formatCurrency(sub.amount, sub.currency || txn.currency || entity.currency || displayCurrency)}</p>
                               </div>
                             ))}
                           </div>
@@ -197,14 +296,34 @@ export function Loans() {
                   })}
                 </div>
               </div>
-            ))
+            );})
           )}
         </div>
       </div>
       
       
-      {isEntityModalOpen && <EntityModal onClose={() => setEntityModalOpen(false)} onSubmit={(name, category, notes, color, currency) => (addLoanEntity as any)(name, category, notes, color, currency)} />}
-      {isTransactionModalOpen && <TransactionModal onClose={() => setTransactionModalOpen(false)} entities={activeEntities} onSubmit={(entityId, amount, type, date, notes, accountId, currency) => addLoanTransaction(entityId, amount, type, date, notes, false, undefined, accountId, currency)} />}
+      {isEntityModalOpen && (
+        <EntityModal 
+          entity={selectedEntityId ? loanEntities.find(e => e.id === selectedEntityId) : undefined}
+          onClose={() => { setEntityModalOpen(false); setSelectedEntityId(null); }} 
+          onSubmit={(name, category, notes, color, currency) => {
+            if (selectedEntityId) {
+              updateLoanEntity(selectedEntityId, { name, category, notes, color, currency });
+            } else {
+              addLoanEntity(name, category, notes, color, currency);
+            }
+            setEntityModalOpen(false);
+            setSelectedEntityId(null);
+          }} 
+        />
+      )}
+      {isTransactionModalOpen && <TransactionModal txn={editingTxn} onClose={() => { setTransactionModalOpen(false); setEditingTxn(null); }} entities={activeEntities} onSubmit={(entityId, amount, type, date, notes, accountId, currency) => {
+        if (editingTxn) {
+          updateLoanTransaction(editingTxn.id, { entityId, amount, type, date, notes, currency });
+        } else {
+          addLoanTransaction(entityId, amount, type, date, notes, false, undefined, accountId, currency);
+        }
+      }} />}
       {repayTxn && (
         <RepayModal 
           txn={repayTxn} 
@@ -221,13 +340,13 @@ export function Loans() {
   );
 }
 
-function EntityModal({ onClose, onSubmit }: { onClose: () => void, onSubmit: (name: string, category: "bank" | "individual", notes: string, color?: string, currency?: string) => void }) {
+function EntityModal({ entity, onClose, onSubmit }: { entity?: any, onClose: () => void, onSubmit: (name: string, category: "bank" | "individual", notes: string, color?: string, currency?: string) => void }) {
   const { currencies } = useFinance();
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState<"bank" | "individual">("individual");
-  const [notes, setNotes] = useState("");
-  const [color, setColor] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [name, setName] = useState(entity?.name || "");
+  const [category, setCategory] = useState<"bank" | "individual">(entity?.category || "individual");
+  const [notes, setNotes] = useState(entity?.notes || "");
+  const [color, setColor] = useState(entity?.color || "");
+  const [currency, setCurrency] = useState(entity?.currency || "USD");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,7 +359,10 @@ function EntityModal({ onClose, onSubmit }: { onClose: () => void, onSubmit: (na
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6">
-        <h2 className="text-xl font-semibold text-zinc-100 mb-6">Add Person / Bank</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-zinc-100">{entity ? "Edit Entity" : "Add Person / Bank"}</h2>
+          <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-200"><X className="w-5 h-5" /></button>
+        </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-1">Name</label>
@@ -283,15 +405,15 @@ function EntityModal({ onClose, onSubmit }: { onClose: () => void, onSubmit: (na
   );
 }
 
-function TransactionModal({ onClose, entities, onSubmit }: { onClose: () => void, entities: any[], onSubmit: (entityId: string, amount: number, type: "lent" | "borrowed", date: string, notes: string, accountId: string, currency: string) => void }) {
+function TransactionModal({ txn, onClose, entities, onSubmit }: { txn?: any, onClose: () => void, entities: any[], onSubmit: (entityId: string, amount: number, type: "lent" | "borrowed", date: string, notes: string, accountId: string, currency: string) => void }) {
   const { accounts, currencies } = useFinance();
-  const [entityId, setEntityId] = useState(entities[0]?.id || "");
-  const [amount, setAmount] = useState("");
-  const [type, setType] = useState<"lent" | "borrowed">("lent");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [notes, setNotes] = useState("");
+  const [entityId, setEntityId] = useState(txn?.entityId || entities[0]?.id || "");
+  const [amount, setAmount] = useState(txn?.amount?.toString() || "");
+  const [type, setType] = useState<"lent" | "borrowed">(txn?.type || "lent");
+  const [date, setDate] = useState(txn?.date || new Date().toISOString().slice(0, 10));
+  const [notes, setNotes] = useState(txn?.notes || "");
   const [accountId, setAccountId] = useState(accounts[0]?.id || "");
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(txn?.currency || "USD");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -304,7 +426,7 @@ function TransactionModal({ onClose, entities, onSubmit }: { onClose: () => void
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6">
-        <h2 className="text-xl font-semibold text-zinc-100 mb-6">New Loan Record</h2>
+        <h2 className="text-xl font-semibold text-zinc-100 mb-6">{txn ? "Edit Loan Record" : "New Loan Record"}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-1">Person / Bank</label>
@@ -318,14 +440,16 @@ function TransactionModal({ onClose, entities, onSubmit }: { onClose: () => void
             <button type="button" onClick={() => setType("lent")} className={`flex-1 py-1.5 text-sm rounded-md ${type === "lent" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500"}`}>I lent money</button>
             <button type="button" onClick={() => setType("borrowed")} className={`flex-1 py-1.5 text-sm rounded-md ${type === "borrowed" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500"}`}>I borrowed money</button>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-1">Account (From/To)</label>
-            <CustomSelect 
-              value={accountId} 
-              onChange={val => setAccountId(val)} 
-              options={accounts.map(a => ({ label: a.name, value: a.id }))}
-            />
-          </div>
+          {!txn && (
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1">Account (From/To)</label>
+              <CustomSelect 
+                value={accountId} 
+                onChange={val => setAccountId(val)} 
+                options={accounts.map(a => ({ label: a.name, value: a.id }))}
+              />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-1">Currency</label>
             <CustomSelect 

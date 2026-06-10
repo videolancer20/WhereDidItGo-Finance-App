@@ -12,7 +12,7 @@ interface TransactionDetailModalProps {
 }
 
 export function TransactionDetailModal({ transaction, onClose, onEdit }: TransactionDetailModalProps) {
-  const { updateTransaction, deleteTransaction, duplicateTransaction, exchangeRates } = useFinance();
+  const { updateTransaction, deleteTransaction, duplicateTransaction, exchangeRates, categories } = useFinance();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [notes, setNotes] = useState(transaction.notes || "");
   const [isEditing, setIsEditing] = useState(false);
@@ -38,17 +38,24 @@ export function TransactionDetailModal({ transaction, onClose, onEdit }: Transac
     const files = Array.from(event.target.files ?? []);
     if (!files.length) return;
 
-    const newAttachments = files.map((file) => ({
-      id: `${file.name}-${file.lastModified}`,
-      name: file.name,
-      type: file.type || "file",
-      size: file.size,
-      addedAt: new Date().toISOString(),
-    }));
-
-    updateTransaction(transaction.id, {
-      attachments: [...(transaction.attachments || []), ...newAttachments],
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const newAttachment = {
+          id: `${file.name}-${file.lastModified}`,
+          name: file.name,
+          type: file.type || "file",
+          size: file.size,
+          addedAt: new Date().toISOString(),
+          url: e.target?.result as string,
+        };
+        updateTransaction(transaction.id, {
+          attachments: [...(transaction.attachments || []), newAttachment],
+        });
+      };
+      reader.readAsDataURL(file);
     });
+
     event.target.value = "";
   }
 
@@ -131,6 +138,22 @@ export function TransactionDetailModal({ transaction, onClose, onEdit }: Transac
                 <p className="text-sm font-medium text-zinc-200">{transaction.category}</p>
               </div>
             </div>
+            {transaction.splits && transaction.splits.length > 0 && (
+              <div className="col-span-2">
+                <p className="text-xs font-medium text-zinc-500 mb-2">Splits</p>
+                <div className="space-y-1.5">
+                  {transaction.splits.map((s, i) => {
+                    const catName = categories.find(c => c.id === s.categoryId)?.name || "Unknown";
+                    return (
+                      <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-zinc-900 border border-zinc-800">
+                        <span className="text-sm text-zinc-300">{catName}</span>
+                        <span className="text-sm font-medium text-zinc-200">{formatCurrency(s.amount)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {transaction.transferAccount && (
               <div>
                 <p className="text-xs font-medium text-zinc-500 mb-1">Transfer To</p>
