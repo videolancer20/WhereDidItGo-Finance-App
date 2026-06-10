@@ -149,7 +149,7 @@ export function Budgets() {
   const displayCur = globalCurrency === "MULTI" ? "USD" : globalCurrency;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
+    <div className="p-4 sm:p-6 lg:p-8 xl:p-10 w-full max-w-[2560px] mx-auto space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-100">Budgets</h1>
@@ -161,7 +161,7 @@ export function Budgets() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 xl:gap-8">
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400"><PiggyBank className="w-6 h-6" /></div>
@@ -184,7 +184,7 @@ export function Budgets() {
 
       <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
         <h2 className="text-lg font-semibold text-zinc-100 mb-6">Monthly Budgets</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 xl:gap-8">
           {enrichedBudgets.map((budget) => {
             const percentage = budget.limit ? (budget.spent / budget.limit) * 100 : 0;
             const isOver = percentage > 100;
@@ -220,19 +220,21 @@ export function Budgets() {
                   <span className={`text-2xl font-semibold ${isOver ? "text-rose-400" : "text-zinc-100"}`}>{formatCurrency(budget.spent, bCur)}</span>
                   <span className="text-sm text-zinc-500 mb-1">of {formatCurrency(budget.limit, bCur)}</span>
                 </div>
-                <div className="h-2.5 w-full bg-zinc-800 rounded-full overflow-hidden mb-2">
-                  <div className={`h-full rounded-full transition-all duration-500 ${isOver ? "bg-rose-500" : budget.color}`} style={{ width: `${Math.min(percentage, 100)}%` }} />
+                <div className="h-2.5 w-full bg-zinc-800/80 rounded-full overflow-hidden mb-3">
+                  <div className={`h-full rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(0,0,0,0.5)] ${isOver ? "bg-rose-500 shadow-rose-500/50" : budget.color}`} style={{ width: `${Math.min(percentage, 100)}%` }} />
                 </div>
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className={isOver ? "text-rose-400 font-medium" : isNear ? "text-amber-400 font-medium" : "text-zinc-500"}>{isOver ? "Over budget!" : isNear ? "Nearing limit" : "On track"}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border ${pacingBadge.color}`}>{pacingBadge.label}</span>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={isOver ? "text-rose-400 font-medium" : isNear ? "text-amber-400 font-medium" : "text-zinc-400"}>{isOver ? "Over budget!" : isNear ? "Nearing limit" : "On track"}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border whitespace-nowrap ${pacingBadge.color}`}>{pacingBadge.label}</span>
+                    </div>
+                    <span className="text-zinc-400 font-medium">{percentage.toFixed(0)}%</span>
                   </div>
-                  <div className="flex items-center gap-2 text-zinc-400">
-                    <span>{percentage.toFixed(0)}%</span>
-                    <span>Proj: {formatCurrency(pacing.projectedMonthEnd, bCur)}</span>
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-zinc-500 bg-zinc-950/50 px-3 py-2 rounded-lg border border-zinc-800/50">
+                    <span>Projected: <strong className="text-zinc-300 font-medium ml-1">{formatCurrency(pacing.projectedMonthEnd, bCur)}</strong></span>
                     {pacing.status === "over-pace" && pacing.projectedOverBy > 0 && (
-                      <span className="text-rose-400 font-medium">+{formatCurrency(pacing.projectedOverBy, bCur)} over</span>
+                      <span className="text-rose-400 font-medium whitespace-nowrap">+{formatCurrency(pacing.projectedOverBy, bCur)} over</span>
                     )}
                   </div>
                 </div>

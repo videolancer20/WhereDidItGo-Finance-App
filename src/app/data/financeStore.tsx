@@ -964,14 +964,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.remove(
       "theme-light", "theme-dark", "theme-midnight", 
       "theme-forest", "theme-sunset", "theme-dracula", "theme-nord", 
-      "theme-cyberpunk", "theme-monochrome", "theme-synthwave", "dark"
+      "theme-cyberpunk", "theme-monochrome", "theme-synthwave", "theme-neon", "dark"
     );
 
     // Apply the current theme class
     document.documentElement.classList.add(theme);
 
     // Also apply 'dark' if it's a dark-based theme
-    if (theme.includes("dark") || theme === "theme-midnight" || theme === "theme-forest" || theme === "theme-sunset" || theme === "theme-dracula" || theme === "theme-nord" || theme === "theme-cyberpunk" || theme === "theme-synthwave") {
+    if (theme.includes("dark") || theme === "theme-midnight" || theme === "theme-forest" || theme === "theme-sunset" || theme === "theme-dracula" || theme === "theme-nord" || theme === "theme-cyberpunk" || theme === "theme-synthwave" || theme === "theme-neon") {
       document.documentElement.classList.add("dark");
     } else if (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
       document.documentElement.classList.add("dark");

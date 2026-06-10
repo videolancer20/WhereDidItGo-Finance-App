@@ -163,7 +163,7 @@ export function CategoryDetail() {
   }, [monthlyData.length, currentLeft, currentRight]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
+    <div className="p-4 sm:p-6 lg:p-8 xl:p-10 w-full max-w-[2560px] mx-auto space-y-8">
       <div className="flex items-center gap-4">
         <Link to="/categories" className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors">
           <ArrowLeft className="w-5 h-5" />
@@ -187,7 +187,7 @@ export function CategoryDetail() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 xl:gap-8">
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
           <p className="text-zinc-400 text-sm font-medium mb-2">Total Income</p>
           <h3 className="text-3xl font-semibold text-zinc-100 mb-2">{formatCurrency(revenue)}</h3>

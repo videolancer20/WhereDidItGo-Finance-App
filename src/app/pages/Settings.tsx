@@ -29,6 +29,7 @@ const THEMES = [
   { id: "theme-cyberpunk", name: "Cyberpunk", bg: "#000000", accent: "#ff003c" },
   { id: "theme-monochrome", name: "Monochrome", bg: "#000000", accent: "#ffffff" },
   { id: "theme-synthwave", name: "Synthwave", bg: "#1a0b2e", accent: "#d600cc" },
+  { id: "theme-neon", name: "Neon", bg: "#0a0a0a", accent: "#e1ff00" },
 ];
 
 const tabs = [
@@ -85,7 +86,7 @@ export function Settings() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-zinc-100">Settings</h1>
         <p className="text-zinc-500 text-sm mt-1">Manage profile, preferences, backups, and local data.</p>

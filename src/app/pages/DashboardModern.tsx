@@ -452,7 +452,7 @@ export function DashboardModern({ showGoals }: { showGoals: boolean }) {
         <Settings className="w-5 h-5" />
       </button>
 
-      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 pb-20 fade-in relative">
+      <div className="p-4 sm:p-6 lg:p-8 xl:p-10 w-full max-w-[2560px] mx-auto space-y-8 pb-20 fade-in relative">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-zinc-100">Command Center</h1>
@@ -475,7 +475,7 @@ export function DashboardModern({ showGoals }: { showGoals: boolean }) {
 
       {/* 1. TOP KPIs */}
       {!settings.dashboardConfig?.hideWallet && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-4 gap-4 xl:gap-6">
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-5 backdrop-blur-sm group hover:bg-zinc-900/60 transition-colors">
           <p className="text-xs font-medium text-zinc-400 mb-1">Total Assets</p>
           {renderKPIValue(liveTotals.totalBalanceConverted, liveTotals.multi.assets, "text-zinc-100")}
@@ -512,8 +512,8 @@ export function DashboardModern({ showGoals }: { showGoals: boolean }) {
       )}
 
       {/* 2. CASHFLOW AND BREAKDOWN */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8">
+        <div className="lg:col-span-2 xl:col-span-3 2xl:col-span-4 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-zinc-100">Interactive Cash Flow</h2>
             {(left !== null || right !== null) && (
@@ -583,7 +583,7 @@ export function DashboardModern({ showGoals }: { showGoals: boolean }) {
       </div>
 
       {/* 3. QUICK ADD & MONTHLY RUN-RATE */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 xl:gap-8">
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 backdrop-blur-sm flex flex-col justify-center">
           <h2 className="text-sm font-semibold text-zinc-100 mb-3 flex items-center gap-2"><Zap className="w-4 h-4 text-amber-400" /> Quick Add Expense</h2>
           <form onSubmit={handleQuickAdd} className="flex gap-2">
@@ -595,7 +595,7 @@ export function DashboardModern({ showGoals }: { showGoals: boolean }) {
           </form>
         </div>
 
-        <div className="lg:col-span-2 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 backdrop-blur-sm">
+        <div className="lg:col-span-2 xl:col-span-3 2xl:col-span-4 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 backdrop-blur-sm">
            <h2 className="text-sm font-semibold text-zinc-100 mb-4 flex items-center gap-2"><Target className="w-4 h-4 text-emerald-400" /> Monthly Run-Rate</h2>
            <div className="space-y-4">
              <div>
@@ -662,7 +662,7 @@ export function DashboardModern({ showGoals }: { showGoals: boolean }) {
       )}
 
       {/* 5. TOP CATEGORIES, SUBSCRIPTIONS, SAVINGS RATE */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 xl:gap-8">
         
         {/* Top Categories */}
         {!settings.dashboardConfig?.hideCategoryPerformance && (
@@ -809,8 +809,10 @@ export function DashboardModern({ showGoals }: { showGoals: boolean }) {
             <thead className="text-xs text-zinc-500 uppercase border-b border-zinc-800">
               <tr>
                 <th className="pb-3 font-medium">Transaction</th>
-                <th className="pb-3 font-medium">Category</th>
-                <th className="pb-3 font-medium">Account</th>
+                <th className="pb-3 font-medium hidden md:table-cell">Date</th>
+                <th className="pb-3 font-medium hidden sm:table-cell">Category</th>
+                <th className="pb-3 font-medium hidden sm:table-cell">Account</th>
+                <th className="pb-3 font-medium hidden lg:table-cell">Notes & Tags</th>
                 <th className="pb-3 font-medium text-right">Amount</th>
               </tr>
             </thead>
@@ -818,7 +820,7 @@ export function DashboardModern({ showGoals }: { showGoals: boolean }) {
               {recentGroupedTransactions.map((group, groupIdx) => (
                 <Fragment key={group.date}>
                   <tr className="bg-zinc-800/60 shadow-sm">
-                    <td colSpan={4} className="py-4 px-4 border-y border-zinc-700/50 text-sm font-bold text-zinc-100 tracking-wide backdrop-blur-sm">
+                    <td colSpan={6} className="py-4 px-4 border-y border-zinc-700/50 text-sm font-bold text-zinc-100 tracking-wide backdrop-blur-sm">
                       {group.date}
                     </td>
                   </tr>
@@ -829,21 +831,33 @@ export function DashboardModern({ showGoals }: { showGoals: boolean }) {
                       <tr key={txn.id} onClick={() => setSelectedTxn(txn)} className="group hover:bg-zinc-800/20 transition-colors cursor-pointer">
                         <td className="py-4">
                           <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            <div className={`w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center ${
                               txn.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-400'
                             }`}>
                               {txn.type === 'income' ? <ArrowDownRight className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
                             </div>
-                            <div>
-                              <p className="font-medium text-zinc-200">{txn.description}</p>
-                              <p className="text-xs text-zinc-500">{new Date(txn.date).toLocaleDateString()}</p>
+                            <div className="min-w-0">
+                              <p className="font-medium text-zinc-200 truncate">{txn.description}</p>
+                              <p className="text-xs text-zinc-500 md:hidden">{new Date(txn.date).toLocaleDateString()}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 text-zinc-400">
+                        <td className="py-4 text-zinc-400 hidden md:table-cell text-sm">
+                          {new Date(txn.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </td>
+                        <td className="py-4 text-zinc-400 hidden sm:table-cell">
                           <span className="px-2.5 py-1 bg-zinc-800/50 rounded-md text-xs">{cat ? cat.name : txn.category}</span>
                         </td>
-                        <td className="py-4 text-zinc-400">{acc ? acc.name : txn.account}</td>
+                        <td className="py-4 text-zinc-400 hidden sm:table-cell text-sm truncate max-w-[120px]">{acc ? acc.name : txn.account}</td>
+                        <td className="py-4 text-zinc-400 hidden lg:table-cell text-sm">
+                          <div className="flex flex-wrap gap-1 items-center">
+                            {txn.notes ? <span className="truncate max-w-[150px] inline-block" title={txn.notes}>{txn.notes}</span> : null}
+                            {txn.tags?.slice(0, 2).map(tag => (
+                              <span key={tag} className="px-1.5 py-0.5 bg-zinc-800 rounded text-[10px]">{tag}</span>
+                            ))}
+                            {!txn.notes && (!txn.tags || txn.tags.length === 0) && <span className="opacity-30">-</span>}
+                          </div>
+                        </td>
                         <td className={`py-4 text-right font-medium ${txn.type === 'income' ? 'text-emerald-400' : 'text-zinc-200'}`}>
                           {txn.type === "income" ? "+" : "-"}{formatCurrency(Math.abs(txn.amount), txn.currency || 'USD')}
                         </td>

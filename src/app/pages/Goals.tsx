@@ -112,7 +112,7 @@ export function Goals() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
+    <div className="p-4 sm:p-6 lg:p-8 xl:p-10 w-full max-w-[2560px] mx-auto space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-100">Financial Goals</h1>
@@ -124,7 +124,7 @@ export function Goals() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 xl:gap-8">
         {goals.map((goal) => {
           const percentage = goal.target ? (goal.current / goal.target) * 100 : 0;
           const Icon = goalIcons[goal.icon as keyof typeof goalIcons] ?? Target;

@@ -77,7 +77,7 @@ export function Subscriptions() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 xl:p-10 w-full max-w-[2560px] mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-100">Subscriptions</h1>
@@ -117,7 +117,7 @@ export function Subscriptions() {
 
       <div className="space-y-4">
         <h2 className="text-lg font-medium text-zinc-100">Active</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 xl:gap-6">
           {activeSubscriptions.map(sub => (
             <SubscriptionCard 
               key={sub.id} 
@@ -145,7 +145,7 @@ export function Subscriptions() {
       {pausedSubscriptions.length > 0 && (
         <div className="space-y-4 mt-8">
           <h2 className="text-lg font-medium text-zinc-100 opacity-70">Paused</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 xl:gap-6">
             {pausedSubscriptions.map(sub => (
               <SubscriptionCard 
                 key={sub.id} 

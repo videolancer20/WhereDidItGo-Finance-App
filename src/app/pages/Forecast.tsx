@@ -612,7 +612,7 @@ export function Forecast() {
   //  RENDER
   // ═══════════════════════════════════════════════════════════
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 pb-20">
+    <div className="p-4 sm:p-6 lg:p-8 xl:p-10 w-full max-w-[2560px] mx-auto space-y-6 pb-20">
       {/* ─── Header ─────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -663,7 +663,7 @@ export function Forecast() {
       </div>
 
       {/* ─── KPI Cards ──────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-6">
         {/* Starting Balance */}
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 backdrop-blur-sm">
           <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-1">
@@ -906,7 +906,7 @@ export function Forecast() {
                 </h3>
               </div>
               {recurringStreams.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 xl:gap-4">
                   {recurringStreams.map((stream, i) => (
                     <div
                       key={i}

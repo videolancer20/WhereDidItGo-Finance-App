@@ -327,7 +327,7 @@ export function Accounts() {
   const archivedAccounts = allAccounts.filter(a => a.archived);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 xl:p-10 w-full max-w-[2560px] mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-100">Accounts</h1>
@@ -349,7 +349,7 @@ export function Accounts() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 xl:gap-8">
         {(showArchived ? allAccounts : accounts).map((acc) => {
           const chartData = acc.trend.map((val, i) => ({ name: i, value: val }));
           const rawBalance = accountBalances[acc.id] ?? acc.openingBalance;

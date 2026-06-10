@@ -216,6 +216,74 @@ export function Analytics() {
     ...netWorthProjection,
   ], [areaData, netWorthProjection]);
 
+  const getRickQuote = (months: number) => {
+    const quotes = [
+      /* 0-1 */ "You're dead you dumb fuck! I told you to save more money, now you're literally gonna die in a gutter!",
+      /* 2-3 */ "Steadyyy! Steady! You're barely clutching this fucking bag! Don't fuck it up.",
+      /* 4-5 */ "Okay, you're not fully fucked yet, but you're broke as shit. Stop buying stupid crap, you piece of garbage.",
+      /* 6-7 */ "Look who's making money now bitch! Keep stacking that paper!",
+      /* 8-9 */ "A few months of runway? Big fucking whoop. You're still a wage-cuck in a simulation.",
+      /* 10-11 */ "Almost a year. Don't break an arm jerking yourself off, Jerry. You're still poor.",
+      /* 12-13 */ "Ahh you cheap fuck! I love you. Keep saving more money like a degenerate.",
+      /* 14-15 */ "Fourteen months of cushion. You're barely out of the trenches, bro. Keep grinding that shit.",
+      /* 16-17 */ "Sixteen months. Just enough time to realize nothing matters, we're all gonna die, and fiat currency is a fucking joke.",
+      /* 18-19 */ "A year and a half! Have you considered freezing your broke ass to skip the boring parts?",
+      /* 20-21 */ "Twenty months. You're not broke yet, but you're still in fucking pain! Wubba lubba dub dub!",
+      /* 22-23 */ "Look at you, actually holding on to your bag. It's disgusting. I love it. *burp*",
+      /* 24-25 */ "Two fucking years! You can literally just sit on your ass and rot for 24 months. Total degenerate move.",
+      /* 26-27 */ "Twenty-six months. You're practically the mayor of Broke-Bitchville now.",
+      /* 28-29 */ "Almost two and a half years. The universe is cold and empty, but your wallet isn't completely tragic.",
+      /* 30-31 */ "Thirty months. You're officially shitting on every single cryptobro on your timeline.",
+      /* 32-33 */ "You've got enough capital to build a fucking portal gun, assuming you weren't a total midwit.",
+      /* 34-35 */ "Nearly three years! You could survive a total market nuke with this bag. Barely.",
+      /* 36-37 */ "Three years of cushion. Now you can focus on your stupid little side-hustle without crying like a little bitch.",
+      /* 38-39 */ "Thirty-eight months. You're financially bulletproof, go take a massive fucking risk already!",
+      /* 40-41 */ "Forty months! Go buy some Kalaxian Crystals and rail them, you earned it.",
+      /* 42-43 */ "Three and a half years of pure unadulterated runway! What are you, a galactic IRS op?",
+      /* 44-45 */ "Forty-four months. You're diamond-handing this cash like I hoard mega seeds up my ass.",
+      /* 46-47 */ "Almost four years! Don't get cocky, the feds could rug-pull this whole fucking economy tomorrow.",
+      /* 48-49 */ "Four years! You're playing it so safe it makes me want to puke. But I respect the absolute stinginess.",
+      /* 50-51 */ "Fifty months! I'm actually impressed, and I've literally seen dimensions collapse.",
+      /* 52-53 */ "Fifty-two months. You're richer than the King of Pluto! And Pluto's not even a fucking planet, you bitch!",
+      /* 54-55 */ "Four and a half years. You've officially achieved 'fuck you' money. Now go say it to someone's face.",
+      /* 56-57 */ "Fifty-six months. You could fund a black-market arms deal against the Citadel with this stash.",
+      /* 58-59 */ "Almost five years! Go buy a custom Plumbus, you rich prick.",
+      /* 60-61 */ "Five fucking years! Are you immortal? Who the fuck plans five years ahead? It's sick.",
+      /* 62-63 */ "Sixty-two months. You're sitting on a mountain of liquid cash, you absolute degenerate.",
+      /* 64-65 */ "Sixty-four months! You could sleep through half a decade of bear markets and still be balling out of control.",
+      /* 66-67 */ "Five and a half years of runway. You've got zero opps and nothing but time to waste.",
+      /* 68-69 */ "Sixty-eight months. Just don't let the Galactic Federation seize your fucking assets.",
+      /* 70-71 */ "Seventy months. I'd totally rob your ass if I didn't already have infinite timelines of infinite wealth.",
+      /* 72-73 */ "Six years! You've basically beaten capitalism. Now what, you gonna start a shitty podcast?",
+      /* 74-75 */ "Seventy-four months. You could build an entire microverse just to power your phone charger, you rich fuck.",
+      /* 76-77 */ "Seventy-six months. A boring, insanely responsible financial god! I'm disgusted and proud.",
+      /* 78-79 */ "Six and a half years. You are mathematically insulated from reality, you lucky bastard.",
+      /* 80-81 */ "Eighty months! You've got enough runway to outlast a literal Cronenberg apocalypse.",
+      /* 82-83 */ "Eighty-two months. Why are you even looking at this fucking app? Go touch grass, bitch!",
+      /* 84-85 */ "Seven years! A goddamn infinite timeline of wealth! You're practically a Rick!",
+      /* 86-87 */ "Eighty-six months. What are you stacking this paper for, a new dimension where you actually pull bitches?",
+      /* 88-89 */ "Eighty-eight months. Time to start blowing it on hookers, blow, and interdimensional cable.",
+      /* 90-91 */ "Seven and a half years. You're so financially secure it makes me want to throw up. *burp*",
+      /* 92-93 */ "Ninety-two months. Even the Council of Ricks would look at this fat bag and nod.",
+      /* 94-95 */ "Ninety-four months. Go buy yourself a Meeseeks box to manage your portfolio, you lazy fuck.",
+      /* 96-97 */ "Eight years of runway! Are you planning to bribe a literal intergalactic deity, you psycho?",
+      /* 98-99 */ "Ninety-eight months. You've achieved financial singularity. You're basically pure fucking energy now.",
+      /* 100-101 */ "One hundred months! That's a nice round number for an evolved ape in shoes.",
+      /* 102-103 */ "Eight and a half years. The Vindicators couldn't burn through this cash if they tried, those pathetic losers.",
+      /* 104-105 */ "One hundred and four months. You've transcended the fiat slave system, buddy. You're a god.",
+      /* 106-107 */ "One hundred and six months. You've got 'buy your own private moon and fuck on it' money.",
+      /* 108-109 */ "Nine years! You could freeze yourself, wake up in the post-apocalypse, and still be the richest guy there!",
+      /* 110-111 */ "One hundred and ten months. You're financially immortal. It's kinda creeping me the fuck out.",
+      /* 112-113 */ "One hundred and twelve months. I'm tearing up... no wait, I'm just drunk as shit.",
+      /* 114-115 */ "Nine and a half years. You've won. The entire simulation surrenders to your fat fucking wallet.",
+      /* 116-117 */ "Oh my god Fahim, you have so much money, even the money will want to fuck you.",
+      /* 118-119 */ "Almost ten years. It's beautiful. Sickeningly responsible, completely devoid of risk, but beautiful.",
+      /* 120+ */ "Ten fucking years! You have infinite money! What are you even doing here?! Go buy a galaxy, you rich bitch!"
+    ];
+    const index = Math.min(Math.floor(months / 2), quotes.length - 1);
+    return quotes[index];
+  };
+
   // New: Radar Data (Budget vs Actual)
   const radarData = useMemo(() => {
     const globalCurrency = settings?.currency || "USD";
@@ -318,6 +386,26 @@ export function Analytics() {
     setLeft(null);
     setRight(null);
   };
+
+  const pacing = useMemo(() => {
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const currentDay = now.getDate();
+    const timeProgress = (currentDay / daysInMonth) * 100;
+    const allExpenses = transactions.filter(t => t.type === 'expense' && t.categoryId !== 'transfer');
+    if (allExpenses.length === 0) return { timeProgress, spendProgress: 0, spentThisMonth: 0, averageSpend: 0 };
+    const monthlyExpenseMap: Record<string, number> = {};
+    allExpenses.forEach(t => {
+      const month = t.date.slice(0, 7);
+      monthlyExpenseMap[month] = (monthlyExpenseMap[month] || 0) + Math.abs(t.amount);
+    });
+    const monthlyExpenseValues = Object.keys(monthlyExpenseMap).sort().map(k => monthlyExpenseMap[k]);
+    const averageSpend = monthlyExpenseValues.length >= 2 ? ewma(monthlyExpenseValues, 0.3) : (monthlyExpenseValues[0] || 0);
+    const thisMonthTxns = allExpenses.filter(t => new Date(t.date).getMonth() === now.getMonth() && new Date(t.date).getFullYear() === now.getFullYear());
+    const spentThisMonth = thisMonthTxns.reduce((s,t) => s + Math.abs(t.amount), 0);
+    const spendProgress = averageSpend > 0 ? (spentThisMonth / averageSpend) * 100 : 0;
+    return { timeProgress, spendProgress, spentThisMonth, averageSpend };
+  }, [transactions]);
 
   const chartContainerRef1 = useRef<HTMLDivElement>(null);
   const chartContainerRef2 = useRef<HTMLDivElement>(null);
@@ -430,7 +518,7 @@ export function Analytics() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 pb-20">
+    <div className="p-4 sm:p-6 lg:p-8 xl:p-10 w-full max-w-[2560px] mx-auto space-y-8 pb-20">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-100">Analytics & Insights</h1>
@@ -445,7 +533,7 @@ export function Analytics() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-8">
         
         {/* Income vs Expense Bar Chart */}
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm">
@@ -539,17 +627,18 @@ export function Analytics() {
             )}
           </div>
         </div>
+      </div>
 
-        {/* Currency Exposure & Burn Rate */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col">
+      {/* Currency Exposure & Burn Rate */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5 gap-6 xl:gap-8">
+          <div className="md:col-span-1 lg:col-span-1 2xl:col-span-1 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col">
             <h2 className="text-lg font-semibold text-zinc-100 mb-2">Currency Exposure</h2>
             <p className="text-xs text-zinc-500 mb-4">Distribution of your liquid assets</p>
-            <div className="h-48 flex-1">
+            <div className="h-[320px] min-h-[320px] flex-1 w-full">
               {currencyData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={currencyData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={5} dataKey="value">
+                  <PieChart margin={{ bottom: 30 }}>
+                    <Pie data={currencyData} cx="50%" cy="45%" innerRadius={50} outerRadius={85} paddingAngle={5} dataKey="value">
                       {currencyData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="rgba(0,0,0,0)" />
                       ))}
@@ -564,7 +653,7 @@ export function Analytics() {
             </div>
           </div>
 
-          <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col justify-center relative overflow-hidden">
+          <div className="md:col-span-1 lg:col-span-1 2xl:col-span-1 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col justify-center relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <Zap className="w-24 h-24 text-amber-500" />
             </div>
@@ -579,6 +668,11 @@ export function Analytics() {
                 <p className="text-xs text-zinc-400 mt-1">
                   {runwayBands.p10}–{runwayBands.p90} months <span className="text-zinc-500">(80% confidence)</span>
                 </p>
+                <div className="mt-4 p-3 bg-zinc-950/50 rounded-lg border border-zinc-800/80">
+                  <p className="text-sm italic text-zinc-300 font-serif leading-relaxed">
+                    "{getRickQuote(runwayBands.p50)}"
+                  </p>
+                </div>
               </div>
               
               <div className="pt-4 border-t border-zinc-800/60">
@@ -593,13 +687,36 @@ export function Analytics() {
               </div>
             </div>
           </div>
+
+          <div className="md:col-span-2 lg:col-span-2 2xl:col-span-3 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col justify-center relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-4 opacity-10">
+               <Target className="w-24 h-24 text-emerald-500" />
+             </div>
+             <h2 className="text-lg font-semibold text-zinc-100 mb-6 flex items-center gap-2">Monthly Run-Rate</h2>
+             <div className="space-y-6 relative z-10">
+               <div>
+                 <div className="flex justify-between text-xs mb-2">
+                   <span className="text-zinc-400">Month Elapsed: {Math.round(pacing.timeProgress)}%</span>
+                   <span className="text-zinc-400">Day {new Date().getDate()}</span>
+                 </div>
+                 <div className="w-full bg-zinc-800 rounded-full h-2">
+                   <div className="bg-zinc-500 h-2 rounded-full" style={{ width: `${Math.min(100, pacing.timeProgress)}%` }}></div>
+                 </div>
+               </div>
+               <div>
+                 <div className="flex justify-between text-xs mb-2">
+                   <span className="text-zinc-400">Avg Spend Reached: {Math.round(pacing.spendProgress)}%</span>
+                   <span className="text-zinc-400">{formatCurrency(pacing.spentThisMonth)} / {formatCurrency(pacing.averageSpend)}</span>
+                 </div>
+                 <div className="w-full bg-zinc-800 rounded-full h-2">
+                   <div className={`h-2 rounded-full ${pacing.spendProgress > pacing.timeProgress ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, pacing.spendProgress)}%` }}></div>
+                 </div>
+               </div>
+             </div>
+          </div>
         </div>
-
-
-      </div>
-
       {/* Insight Cards Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 xl:gap-8">
         <div className="col-span-1 md:col-span-1 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col items-center justify-center text-center">
           <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4 border border-emerald-500/20">
             <span className="text-2xl font-bold text-emerald-400">{healthScore}</span>
@@ -625,7 +742,7 @@ export function Analytics() {
               upcomingSubscriptions.map(sub => {
                 const subAccount = accounts.find(a => a.id === sub.accountId);
                 return (
-                  <div key={sub.id} className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-800/30 border border-zinc-800/50">
+                  <div key={sub.id} className="flex items-center justify-between p-2.5 sm:px-4 lg:px-8 xl:px-10 rounded-lg bg-zinc-800/30 border border-zinc-800/50">
                     <div className="flex items-center gap-3">
                       <div className={clsx("w-2 h-2 rounded-full", sub.color || "bg-indigo-500")}></div>
                       <div>
@@ -645,7 +762,7 @@ export function Analytics() {
       </div>
 
       {/* Tag Analytics */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 xl:gap-8">
         <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col">
           <h2 className="text-lg font-semibold text-zinc-100 mb-2">Spending by Tag</h2>
           <p className="text-xs text-zinc-500 mb-4">Expense breakdown by custom tags</p>
@@ -698,7 +815,7 @@ export function Analytics() {
           <h2 className="text-lg font-semibold text-zinc-100 mb-4">Top Spending Tags</h2>
           <div className="flex-1 overflow-y-auto pr-2 space-y-3">
             {tagsData.length > 0 ? tagsData.map((t, i) => (
-              <div key={i} className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/30 border border-zinc-800/50">
+              <div key={i} className="flex justify-between items-center p-3 sm:px-4 lg:px-8 xl:px-10 rounded-lg bg-zinc-800/30 border border-zinc-800/50">
                 <div className="flex items-center gap-3">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
                   <span className="text-sm font-medium text-zinc-200">{t.name}</span>

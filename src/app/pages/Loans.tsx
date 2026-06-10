@@ -78,7 +78,7 @@ export function Loans() {
   }, [activeEntities, loanTransactions, activeTab]);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 xl:p-10 w-full max-w-[2560px] mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-100">Loans</h1>
