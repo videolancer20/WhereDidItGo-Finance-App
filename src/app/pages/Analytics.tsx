@@ -95,11 +95,16 @@ export function Analytics() {
 
   const topSpending = useMemo(() => {
     const totalsByCategory = new Map<string, number>();
+    const globalCurrency = settings?.currency || "USD";
     for (const transaction of filteredTransactions.filter((item) => item.type === "expense")) {
-      totalsByCategory.set(transaction.category, (totalsByCategory.get(transaction.category) ?? 0) + Math.abs(transaction.amount));
+      const rateToUse = transaction.exchangeRate || exchangeRates[transaction.currency || "USD"] || 1;
+      const amountInBase = Math.abs(transaction.amount) / rateToUse;
+      const targetRate = exchangeRates[globalCurrency] || 1;
+      const finalAmount = amountInBase * targetRate;
+      totalsByCategory.set(transaction.category, (totalsByCategory.get(transaction.category) ?? 0) + finalAmount);
     }
     return [...totalsByCategory.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
-  }, [filteredTransactions]);
+  }, [filteredTransactions, settings?.currency, exchangeRates]);
 
   // Runway & Burn Rate (computed early — needed by healthScore)
   const { burnRate, liquidAssets } = useMemo(() => {
@@ -213,6 +218,7 @@ export function Analytics() {
 
   // New: Radar Data (Budget vs Actual)
   const radarData = useMemo(() => {
+    const globalCurrency = settings?.currency || "USD";
     return budgets.map(b => {
       const actual = filteredTransactions
         .filter((t) => {
@@ -220,7 +226,12 @@ export function Analytics() {
           if (b.targetType === "account") return t.accountId === b.categoryId;
           return t.categoryId === b.categoryId;
         })
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        .reduce((sum, t) => {
+          const rateToUse = t.exchangeRate || exchangeRates[t.currency || "USD"] || 1;
+          const amountInBase = Math.abs(t.amount) / rateToUse;
+          const targetRate = exchangeRates[globalCurrency] || 1;
+          return sum + (amountInBase * targetRate);
+        }, 0);
       return { 
         subject: b.category, 
         budget: b.limit, 
@@ -228,7 +239,7 @@ export function Analytics() {
         fullMark: Math.max(b.limit, actual) * 1.2 
       };
     });
-  }, [budgets, filteredTransactions]);
+  }, [budgets, filteredTransactions, settings?.currency, exchangeRates]);
 
   // New: Currency Exposure Pie
   const currencyData = useMemo(() => {

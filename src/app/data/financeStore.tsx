@@ -193,28 +193,6 @@ export interface SubscriptionOverride {
   skipped: boolean;
 }
 
-export interface InvestmentAsset {
-  id: string;
-  symbol: string;
-  name: string;
-  type: "stock" | "crypto" | "real_estate" | "other";
-  shares: number;
-  averagePrice: number;
-  currentPrice: number;
-  currency: string;
-}
-
-export interface InvestmentTransaction {
-  id: string;
-  assetId: string;
-  type: "buy" | "sell";
-  date: string;
-  shares: number;
-  price: number;
-  fees: number;
-  accountId?: string;
-}
-
 export interface FinanceState {
   version: number;
   transactions: FinanceTransaction[];
@@ -232,8 +210,6 @@ export interface FinanceState {
   subscriptionOverrides: SubscriptionOverride[];
   exchangeRates: Record<string, number>;
   customExchangeRates?: Record<string, number>;
-  investments: InvestmentAsset[];
-  investmentTransactions: InvestmentTransaction[];
   goalContributions?: GoalContribution[];
 }
 
@@ -445,6 +421,7 @@ interface FinanceContextValue {
   transactions: FinanceTransaction[];
   categories: CategoryRecord[];
   accounts: AccountRecord[];
+  allAccounts: AccountRecord[];
   budgets: BudgetRecord[];
   goals: GoalRecord[];
   reports: SavedReport[];
@@ -476,6 +453,7 @@ interface FinanceContextValue {
   addAccount: (name: string, type: string, openingBalance: number, color?: string, stroke?: string, currency?: string) => void;
   updateAccount: (id: string, changes: Partial<AccountRecord>) => void;
   archiveAccount: (id: string) => void;
+  unarchiveAccount: (id: string) => void;
   addBudget: (categoryId: string, limit: number, color: string, currency: string, targetType?: "category" | "account") => void;
   updateBudget: (id: string, changes: Partial<BudgetRecord>) => void;
   deleteBudget: (id: string) => void;
@@ -529,16 +507,6 @@ interface FinanceContextValue {
   // Alerts
   smartAlerts: Array<{ id: string; type: string; icon: any; message: string }>;
   dismissAlert: (id: string) => void;
-
-  // Investments
-  investments: InvestmentAsset[];
-  investmentTransactions: InvestmentTransaction[];
-  addInvestmentAsset: (asset: Omit<InvestmentAsset, "id">) => string;
-  updateInvestmentAsset: (id: string, changes: Partial<InvestmentAsset>) => void;
-  deleteInvestmentAsset: (id: string) => void;
-  addInvestmentTransaction: (txn: Omit<InvestmentTransaction, "id">, accountId?: string) => void;
-  deleteInvestmentTransaction: (id: string) => void;
-  updateInvestmentPrice: (id: string, newPrice: number) => void;
   
   // Reconciliation
   toggleReconciled: (id: string) => void;
@@ -1247,6 +1215,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       transactions,
       categories: activeCategories,
       accounts: activeAccounts,
+      allAccounts: state.accounts,
       budgets: state.budgets,
       goals: state.goals,
       reports: state.reports,
@@ -1256,8 +1225,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       totals,
       exchangeRates: { ...state.exchangeRates, ...(state.customExchangeRates || {}) },
       customExchangeRates: state.customExchangeRates,
-      investments: state.investments || [],
-      investmentTransactions: state.investmentTransactions || [],
       goalContributions: state.goalContributions || [],
       fetchLiveRates,
       addTransaction: (transaction) => {
@@ -1456,9 +1423,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       archiveAccount: (id) => {
         setAndResolve((current) => ({
           ...current,
-          accounts: current.accounts.map((account) => (account.id === id ? { ...account, archived: true } : account)),
+          accounts: current.accounts.map((a) => (a.id === id ? { ...a, archived: true } : a)),
         }));
         toast.info("Account archived");
+      },
+      unarchiveAccount: (id) => {
+        setAndResolve((current) => ({
+          ...current,
+          accounts: current.accounts.map((a) => (a.id === id ? { ...a, archived: false } : a)),
+        }));
+        toast.info("Account unarchived");
       },
       addBudget: (categoryId, limit, color, currency, targetType = "category") => {
         setAndResolve((current) => {
@@ -2016,82 +1990,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
             settings: { ...current.settings, dismissedAlerts }
           };
         });
-      },
-      addInvestmentAsset: (asset) => {
-        const id = createId("inv");
-        setAndResolve((current) => ({
-          ...current,
-          investments: [...(current.investments || []), { ...asset, id }]
-        }));
-        toast.success("Asset added");
-        return id;
-      },
-      updateInvestmentAsset: (id, changes) => {
-        setAndResolve((current) => ({
-          ...current,
-          investments: (current.investments || []).map(a => a.id === id ? { ...a, ...changes } : a)
-        }));
-        toast.success("Asset updated");
-      },
-      deleteInvestmentAsset: (id) => {
-        setAndResolve((current) => ({
-          ...current,
-          investments: (current.investments || []).filter(a => a.id !== id),
-          investmentTransactions: (current.investmentTransactions || []).filter(t => t.assetId !== id)
-        }));
-        toast.info("Asset deleted");
-      },
-      addInvestmentTransaction: (txn, accountId) => {
-        const id = createId("itxn");
-        setAndResolve(current => {
-          let newTxns = current.transactions;
-          if (accountId) {
-            const acc = current.accounts.find(a => a.id === accountId);
-            const asset = current.investments.find(a => a.id === txn.assetId);
-            if (acc && asset) {
-              const totalCost = (txn.shares * txn.price) + (txn.fees || 0);
-              newTxns = [
-                {
-                  id: createId("txn"),
-                  date: txn.date,
-                  description: `${txn.type === 'buy' ? 'Buy' : 'Sell'} ${asset.symbol}`,
-                  categoryId: "transfer",
-                  category: "Investments",
-                  accountId,
-                  account: acc.name,
-                  amount: txn.type === 'buy' ? -totalCost : totalCost,
-                  type: txn.type === 'buy' ? "expense" : "income",
-                  status: "Completed",
-                  notes: `Trade ${txn.shares} shares of ${asset.symbol} @ ${txn.price}`,
-                  tags: ["investment"],
-                  attachments: [],
-                  currency: acc.currency || "USD"
-                },
-                ...current.transactions
-              ];
-            }
-          }
-          return {
-            ...current,
-            transactions: newTxns,
-            investmentTransactions: [{ ...txn, id }, ...current.investmentTransactions]
-          };
-        });
-        toast.success("Trade recorded");
-      },
-      deleteInvestmentTransaction: (id) => {
-        setAndResolve((current) => ({
-          ...current,
-          investmentTransactions: (current.investmentTransactions || []).filter(t => t.id !== id)
-        }));
-        toast.info("Transaction deleted");
-      },
-      updateInvestmentPrice: (id, newPrice) => {
-        setAndResolve((current) => ({
-          ...current,
-          investments: (current.investments || []).map(a => a.id === id ? { ...a, currentPrice: newPrice } : a)
-        }));
-        toast.success("Price updated");
       },
       toggleReconciled: (id) => {
         setAndResolve((current) => ({

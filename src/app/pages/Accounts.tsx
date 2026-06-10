@@ -35,7 +35,7 @@ export interface AccountModalProps {
 }
 
 export function AccountModal({ account, mode, onClose }: AccountModalProps) {
-  const { accounts, addAccount, updateAccount, archiveAccount, addTransfer, accountBalances, currencies } = useFinance();
+  const { accounts, addAccount, updateAccount, archiveAccount, unarchiveAccount, addTransfer, accountBalances, currencies } = useFinance();
   const [name, setName] = useState(account?.name ?? "");
   const [type, setType] = useState(account?.type ?? "Bank Account");
   const [balance, setBalance] = useState(String(account ? accountBalances[account.id] ?? account.openingBalance : 0));
@@ -150,14 +150,23 @@ export function AccountModal({ account, mode, onClose }: AccountModalProps) {
 
         <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-900/50 flex justify-between gap-3 rounded-b-2xl">
           {mode === "edit" && account ? (
-            <button type="button" onClick={() => {
-              if (window.confirm("Archive this account? Existing transactions will stay available.")) {
-                archiveAccount(account.id);
+            account.archived ? (
+              <button type="button" onClick={() => {
+                unarchiveAccount(account.id);
                 onClose();
-              }
-            }} className="px-4 py-2 text-sm text-rose-400 hover:bg-rose-500/10 rounded-lg">
-              Archive
-            </button>
+              }} className="px-4 py-2 text-sm text-emerald-400 hover:bg-emerald-500/10 rounded-lg">
+                Unarchive
+              </button>
+            ) : (
+              <button type="button" onClick={() => {
+                if (window.confirm("Archive this account? Existing transactions will stay available.")) {
+                  archiveAccount(account.id);
+                  onClose();
+                }
+              }} className="px-4 py-2 text-sm text-rose-400 hover:bg-rose-500/10 rounded-lg">
+                Archive
+              </button>
+            )
           ) : <span />}
           <div className="flex gap-3">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
@@ -310,9 +319,12 @@ function ReconcileModal({ account, onClose }: { account: AccountRecord; onClose:
 }
 
 export function Accounts() {
-  const { accounts, accountBalances, settings, exchangeRates, currencies } = useFinance();
+  const { accounts, accountBalances, settings, exchangeRates, currencies, allAccounts, unarchiveAccount } = useFinance();
   const [modal, setModal] = useState<{ mode: "create" | "edit" | "transfer" | "detail" | "reconcile"; account?: AccountRecord } | null>(null);
   const [displayCurrency, setDisplayCurrency] = useState(settings.currency || "USD");
+  const [showArchived, setShowArchived] = useState(false);
+
+  const archivedAccounts = allAccounts.filter(a => a.archived);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
@@ -325,6 +337,11 @@ export function Accounts() {
           <div className="w-32">
             <CustomSelect value={displayCurrency} onChange={setDisplayCurrency} options={currencies.map(c => ({ label: c, value: c }))} />
           </div>
+          {archivedAccounts.length > 0 && (
+            <button onClick={() => setShowArchived(!showArchived)} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors bg-zinc-900/50 rounded-lg border border-zinc-800">
+              {showArchived ? "Hide Archived" : `Archived (${archivedAccounts.length})`}
+            </button>
+          )}
           <button onClick={() => setModal({ mode: "create" })} className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg shadow-lg shadow-indigo-500/20 transition-all">
             <Plus className="w-4 h-4" />
             Link Account
@@ -333,7 +350,7 @@ export function Accounts() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {accounts.map((acc) => {
+        {(showArchived ? allAccounts : accounts).map((acc) => {
           const chartData = acc.trend.map((val, i) => ({ name: i, value: val }));
           const rawBalance = accountBalances[acc.id] ?? acc.openingBalance;
           const baseRate = exchangeRates[acc.currency || "USD"] || 1;

@@ -557,18 +557,18 @@ export function DashboardModern({ showGoals }: { showGoals: boolean }) {
               </div>
             </div>
             <div className="h-48 relative">
-              <ResponsiveContainer width="100%" height="100%">
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-0">
+                <span className="text-xl font-bold text-zinc-100">{formatCurrency(breakdownData.reduce((s,i) => s + i.value, 0))}</span>
+                <span className="text-[10px] text-zinc-500 uppercase">Total {breakdownType}</span>
+              </div>
+              <ResponsiveContainer width="100%" height="100%" className="relative z-10">
                 <PieChart>
                   <Pie data={breakdownData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
                     {breakdownData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                   </Pie>
-                  <RechartsTooltip content={<CustomPieTooltip />} cursor={{ fill: 'var(--zinc-800)', opacity: 0.4 }} />
+                  <RechartsTooltip wrapperStyle={{ zIndex: 100 }} content={<CustomPieTooltip />} cursor={{ fill: 'var(--zinc-800)', opacity: 0.4 }} />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-xl font-bold text-zinc-100">{formatCurrency(breakdownData.reduce((s,i) => s + i.value, 0))}</span>
-                <span className="text-[10px] text-zinc-500 uppercase">Total {breakdownType}</span>
-              </div>
             </div>
             <div className="grid grid-cols-2 gap-3 mt-4">
               {breakdownData.map((item, i) => (
